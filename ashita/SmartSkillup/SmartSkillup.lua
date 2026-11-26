@@ -8,6 +8,9 @@ require('common');
 
 local shim = require('windower_shim');
 local compat = require('sms_compat');
+local last_job_check = 0;
+local initialize_sms;
+local check_job_change;
 
 ashita.events.register('load', 'smartskillup_load', function()
     shim.install();
@@ -17,6 +20,17 @@ ashita.events.register('load', 'smartskillup_load', function()
     require('me');
     require('modules');
     require('sms_loop');
+    windower.register_event('incoming chunk', function(id, data)
+        if id == 0x062 and not check_job_change() then process_skill_packet(data); end
+    end);
+    skill_data_request_timeout();
+
+    ashita.events.register('d3d_present', 'smartskillup_job_watch', function()
+        local now = os.clock();
+        if now - last_job_check < 0.5 then return; end
+        last_job_check = now;
+        check_job_change();
+    end);
     print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop and modules are ported; events and auto-rest are not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
 end);
 
@@ -283,8 +297,33 @@ local function ensure_session()
     if next(valid_spells_sorted) == nil or modules.refresh == nil then prepare_session(); end
 end
 
--- TEST ONLY: adds a skill by partial name without the skill cap check (that needs the skill packet, not yet ported).
-local function sms_add(term)
+-- Detects a main or sub job change and schedules the reset. Returns true when a job change was found.
+-- Windower sets awaiting_initialize until its delayed reset runs, so false-flag cap events from the server are ignored.
+function check_job_change()
+    local p = windower.ffxi.get_player();
+    if not p or me.main_job_id == nil then return false; end
+    if p.main_job_id == me.main_job_id and p.sub_job_id == me.sub_job_id then
+        update_me_job();
+        return false;
+    end
+    update_me_job();
+    me.awaiting_initialize = true;
+    coroutine.schedule(initialize_sms, 0.5);
+    return true;
+end
+
+-- Resets the session and rebuilds the job data after a job change (Windower's initialize_sms).
+function initialize_sms()
+    active, paused, going, skill_data_retrieved, skill_to_skillup, skills_to_skillup = false, false, false, false, nil, T{};
+    end_timeout_and_decision('job change');
+    prepare_session();
+    skill_data_request_timeout();
+    me.awaiting_initialize = nil;
+end
+
+-- Adds a skill by partial name. Waits for the skill packet when the cap status is not known yet (Windower's 'add' flow).
+local function sms_add(term, attempts)
+    attempts = attempts or 0;
     if next(valid_spells_sorted) == nil then prepare_session(); end
     local match = nil;
     for skill_en in pairs(main_skills) do
@@ -292,6 +331,15 @@ local function sms_add(term)
     end
     if not match then
         return print('[SmartSkillup] No main skill matches "' .. term .. '".');
+    elseif main_skills[match].capped == nil then
+        if attempts >= 5 then
+            return print('[SmartSkillup] Failed to retrieve skill cap status, please try again.');
+        end
+        print('[SmartSkillup] [WAIT] Please wait, fetching skill cap status...');
+        request_skill_data();
+        return coroutine.schedule(function() sms_add(term, attempts + 1); end, 2);
+    elseif main_skills[match].capped then
+        return print('[SmartSkillup] [DENIED] ' .. match .. ' is currently capped (' .. main_skills[match].level .. ').');
     elseif not valid_spells_sorted[match] or #valid_spells_sorted[match] == 0 then
         return print('[SmartSkillup] "' .. match .. '" has no valid spells for this job.');
     elseif skills_to_skillup:contains(match) then
@@ -299,7 +347,7 @@ local function sms_add(term)
     end
     skills_to_skillup:insert(match);
     if skill_to_skillup == nil then skill_to_skillup = match; end
-    print('[SmartSkillup] Added "' .. match .. '" (test only: skill cap check skipped). Session skills: ' .. table.concat(skills_to_skillup, ', '));
+    print('[SmartSkillup] Added "' .. match .. '" (level ' .. main_skills[match].level .. '). Session skills: ' .. table.concat(skills_to_skillup, ', '));
 end
 
 -- Returns true when the command was one of ours, so the caller can block it.

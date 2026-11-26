@@ -1,6 +1,6 @@
 -- Ported from the Windower helpers.lua (Copyright 2022, RolandJ, BSD 3-Clause; see the original in the repo root).
 -- Ported so far: logger, reports, session toggles, spell validity and weighting, main skills, skill data processing.
--- TODO(ashita): begin_loop, event pauses, status/buff processing, determine_modules, and skill_data_request_timeout
+-- TODO(ashita): begin_loop, event pauses, status/buff processing
 --   (needs the skill packet request and response, which are not ported yet).
 
 -- Shared state that the Windower main file declares; initialized here until that file is ported.
@@ -273,8 +273,64 @@ end
 
 
 -------------------------------------------------------------------------------------------------------------------
+-- Sends the skill data request (0x061). Windower used packets.inject(packets.new('outgoing', 0x061)).
+-------------------------------------------------------------------------------------------------------------------
+function request_skill_data()
+	local packet = struct.pack('bbbbbbbb', 0x61, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00):totable();
+	AshitaCore:GetPacketManager():AddOutgoingPacket(0x61, packet);
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Requests skill data every 10 seconds until it arrives, up to 6 attempts (Windower's skill_data_request_timeout).
+-------------------------------------------------------------------------------------------------------------------
+function skill_data_request_timeout(attempts)
+	attempts = attempts or 0;
+	local attempts_max = 6;
+	if skill_data_retrieved then
+		logger(chat_colors.purple, '[SKILL DATA RECEIVED] Received the data on attempt ' .. attempts .. '/' .. attempts_max, true);
+	elseif attempts < attempts_max then
+		logger(chat_colors.purple, '[SKILL REQUEST] Requesting skill data from server; attempt ' .. attempts .. '/' .. attempts_max, true);
+		request_skill_data();
+		skill_data_request_timeout:schedule(10, attempts + 1);
+	else
+		logger(chat_colors.red, '[SKILL DATA ISSUE] Unable to retrieve skill data from server after ' .. attempts .. ' attempts.');
+	end
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Reads the level and cap flag of each main skill from a 0x062 packet, then processes them.
+-- Skill id k is a 16-bit value at 0x82 + 2*(k-1); the top bit marks the skill as capped.
+-- struct.unpack uses 1-based positions, hence the +1.
+-------------------------------------------------------------------------------------------------------------------
+function process_skill_packet(data)
+	if next(main_skills) == nil then
+		build_me_table();
+		get_main_skills();
+	end
+	local packet = {};
+	for skill, info in pairs(main_skills) do
+		if info.id then
+			local value = struct.unpack('H', data, 0x82 + 2 * (info.id - 1) + 1);
+			packet[skill .. ' Level'] = value % 0x8000;
+			packet[skill .. ' Capped'] = value >= 0x8000;
+		end
+	end
+	process_skill_data(packet);
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Announces a cap flip after a short delay. A job change can flip the server's cap flag before the client's job
+-- data updates, so the cap only counts if the same job is still set and the skill table was not rebuilt.
+-------------------------------------------------------------------------------------------------------------------
+function confirm_skill_cap(skill, data, job_id)
+	if main_skills[skill] ~= data or me.awaiting_initialize or me.main_job_id ~= job_id or not data.capped then return end
+	logger(chat_colors.green, '[SKILL CAP] Congratulations, "' .. skill .. '" skill has capped!')
+	remove_skill_from_session(data.en, true)
+end
+
+-------------------------------------------------------------------------------------------------------------------
 -- Unpack the skill packet into level/capped data for main_skills. Initialize UI on first round.
--- The skill packet source is not ported yet; packet is a table keyed like the Windower packet fields.
+-- packet is a table keyed like the Windower packet fields ("<Skill> Level", "<Skill> Capped").
 -------------------------------------------------------------------------------------------------------------------
 function process_skill_data(packet)
 	logger(chat_colors.purple, '[SKILL DATA] Processing incoming skill level/cap data...', true)
@@ -291,8 +347,7 @@ function process_skill_data(packet)
 			-- SKILL CAP/UNCAP (uncap on levelup)
 			if capped ~= data.capped and not me.awaiting_initialize then
 				if capped then
-					logger(chat_colors.green, '[SKILL CAP] Congratulations, "' .. skill .. '" skill has capped!')
-					remove_skill_from_session(data.en, true)
+					coroutine.schedule(function() confirm_skill_cap(skill, data, me.main_job_id); end, 2);
 				end
 				ui.set_text_color(skill, capped and 'blue' or 'white')
 			end
