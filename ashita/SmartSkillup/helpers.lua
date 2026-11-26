@@ -1,7 +1,6 @@
 -- Ported from the Windower helpers.lua (Copyright 2022, RolandJ, BSD 3-Clause; see the original in the repo root).
 -- Ported so far: logger, reports, session toggles, spell validity and weighting, main skills, skill data processing.
--- TODO(ashita): begin_loop, event pauses, status/buff processing
---   (needs the skill packet request and response, which are not ported yet).
+-- TODO(ashita): begin_loop, status/buff processing (needs the skill packet request and response, which are not ported yet).
 
 -- Shared state that the Windower main file declares; initialized here until that file is ported.
 valid_spells = valid_spells or T{}

@@ -25,8 +25,26 @@ ashita.events.register('load', 'smartskillup_load', function()
             if not check_job_change() then process_skill_packet(data); end
         elseif id == 0x028 and me.id then
             process_action(require('action_packets').parse_action(data));
+        elseif id == 0x028 and me.id then
+            process_action(require('action_packets').parse_action(data));
         elseif id == 0x029 and me.id then
             process_action_message(require('action_packets').parse_action_message(data));
+        elseif S{0x032, 0x033, 0x034}:contains(id) then
+            pause_event('NPC');
+        elseif id == 0x05C then
+            -- The NPC menu sends an unlock (0x052) before the player decides, so the first one is ignored.
+            me.awaiting_0x052 = true;
+            coroutine.schedule(function() me.awaiting_0x052 = nil; end, 1.5);
+        elseif id == 0x052 then
+            if me.awaiting_0x052 then
+                me.awaiting_0x052 = nil;
+            else
+                unpause_event('NPC', 1.5);
+            end
+        elseif id == 0x00B then
+            pause_event('Zoning');
+        elseif id == 0x00A then
+            unpause_event('Zoning', 6);
         end
     end);
     skill_data_request_timeout();
@@ -308,6 +326,8 @@ end
 function check_job_change()
     local p = windower.ffxi.get_player();
     if not p or me.main_job_id == nil then return false; end
+    -- Job memory is cleared or reloading while zoning, so ignore it until the zone pause ends.
+    if not p.main_job_id or p.main_job_id == 0 or event_pauses.Zoning then return false; end
     if p.main_job_id == me.main_job_id and p.sub_job_id == me.sub_job_id then
         update_me_job();
         return false;

@@ -1,6 +1,6 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
 -- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here.
--- Not ported yet: event pauses (NPC, zoning), food/moogle handling, and auto-rest (decide_to_rest stops the loop instead).
+-- Not ported yet: status pauses (resting, dead, cutscene), food/moogle handling, and auto-rest (decide_to_rest stops the loop instead).
 
 local sms_res = require('sms_res');
 threads = threads or {};
@@ -152,6 +152,69 @@ function process_action_message(msg)
         get_valid_spells();
         logger(chat_colors.purple, '[SPELL LEARNED] Rebuilt valid spells.', true);
     end
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Event pauses (NPC locks, zoning). Ported from the Windower event_pauses_metatable: a pause ends an active loop,
+-- and the loop restarts once the last pause ends.
+-------------------------------------------------------------------------------------------------------------------
+local function count_event_pauses()
+    local count = 0;
+    for _, value in pairs(event_pauses) do
+        if value then count = count + 1; end
+    end
+    return count;
+end
+
+local function set_event_pause(event, value)
+    local start_count = count_event_pauses();
+    event_pauses[event] = value;
+    local end_count = count_event_pauses();
+
+    -- EVENT PAUSE STARTED
+    if start_count == 0 and end_count > 0 then
+        local reason = 'PAUSE EVENT' .. larr .. event:upper();
+        if not active or paused then
+            logger(chat_colors.lpurple, '[' .. reason .. '] Ignored, inactive or player-paused.', true);
+        else
+            going = false;
+            end_timeout_and_decision(reason, chat_colors.purple, '[' .. reason .. '] "' .. event .. '" started an event pause and ended the timeout and decisions.', true);
+        end
+
+    -- EVENT PAUSE ENDED
+    elseif end_count == 0 and start_count > 0 then
+        local reason = 'UNPAUSE EVENT' .. larr .. event:upper();
+        if going and not me.awaiting_event_pause_end then
+            logger(chat_colors.lpurple, '[' .. reason .. '] Ignored, loop already going.', true);
+        elseif not active or paused then
+            logger(chat_colors.lpurple, '[' .. reason .. '] Ignored, inactive or player-paused.', true);
+        else
+            going = true;
+            me.awaiting_event_pause_end = nil;
+            end_timeout_and_decision(reason);
+            schedule_decision(1, reason, chat_colors.purple, '[' .. reason .. '] The last event, "' .. event .. '", scheduled a decision in 1 sec...', true);
+        end
+
+    -- A NESTED EVENT STARTED OR ENDED
+    else
+        local mode = value and 'pause' or 'unpause';
+        logger(chat_colors.lpurple, '[' .. mode:upper() .. ' EVENT' .. larr .. event:upper() .. '] Ignored a nested "' .. event .. '" ' .. mode .. '.', false, true);
+    end
+end
+
+function pause_event(event)
+    local key = 'sched_' .. event .. '_unpause';
+    if threads[key] then
+        pcall(coroutine.close, threads[key]); -- the event is pausing again, so its pending unpause would be premature
+        threads[key] = nil;
+    end
+    set_event_pause(event, true);
+end
+
+function unpause_event(event, delay)
+    threads['sched_' .. event .. '_unpause'] = coroutine.schedule(function()
+        set_event_pause(event, nil);
+    end, delay or 0);
 end
 
 -------------------------------------------------------------------------------------------------------------------
