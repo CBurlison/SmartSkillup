@@ -4,7 +4,7 @@
 local M = {};
 
 -- Bump this when sms_res changes so /sms test shows which copy is loaded.
-M.build = 'probe-step2-v3';
+M.build = 'modules-v1';
 
 -- Returns the item id for an English item name, or nil when the name is unknown.
 function M.item_id_by_name(name)

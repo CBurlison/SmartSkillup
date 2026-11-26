@@ -1,5 +1,5 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
--- Step 1 of the port. Not ported yet: modules (use_module is a stub), event pauses (only the timeout branch
+-- use_module lives in modules.lua. Not ported yet: event pauses (only the timeout branch
 -- of process_event runs), and auto-rest (decide_to_rest stops the loop instead).
 
 threads = threads or {};
@@ -11,11 +11,6 @@ active = active or false;
 going = going or false;
 paused = paused or false;
 force_stop_cast = force_stop_cast or false;
-
--- Modules are step 2. Returning false means no module is in use.
-function use_module()
-    return false;
-end
 
 -- Auto-rest needs the engaged and claim checks, which are not ported yet. Stop the loop instead of resting.
 function decide_to_rest(source)

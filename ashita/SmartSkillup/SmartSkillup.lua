@@ -15,8 +15,9 @@ ashita.events.register('load', 'smartskillup_load', function()
     require('statics');
     require('helpers');
     require('me');
+    require('modules');
     require('sms_loop');
-    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop is ported; modules, events and rest are not yet. Use /sms add <skill>, /sms go, /sms stop.');
+    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop and modules are ported; events and auto-rest are not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
 end);
 
 ashita.events.register('unload', 'smartskillup_unload', function()
@@ -274,6 +275,12 @@ local function prepare_session()
     build_me_table();
     get_main_skills();
     get_valid_spells();
+    determine_modules();
+end
+
+-- Prepares the session data and modules on first use. /sms test fills the spell lists without the modules, so both are checked.
+local function ensure_session()
+    if next(valid_spells_sorted) == nil or modules.refresh == nil then prepare_session(); end
 end
 
 -- TEST ONLY: adds a skill by partial name without the skill cap check (that needs the skill packet, not yet ported).
@@ -300,7 +307,7 @@ local function dispatch(cmd)
     if cmd:match('^/smartskillup%s+test%s*$') or cmd:match('^/sms%s+test%s*$') then
         run_self_test();
     elseif cmd:match('^/sms%s+go%s*$') or cmd:match('^/smartskillup%s+go%s*$') then
-        if next(valid_spells_sorted) == nil then prepare_session(); end
+        ensure_session();
         begin_loop('command');
     elseif cmd:match('^/sms%s+stop%s*$') or cmd:match('^/smartskillup%s+stop%s*$') then
         active, going, paused = false, false, false;
@@ -308,6 +315,9 @@ local function dispatch(cmd)
         print('[SmartSkillup] Stopped.');
     elseif cmd:match('^/sms%s+add%s+%S') or cmd:match('^/smartskillup%s+add%s+%S') then
         sms_add(cmd:match('^/%S+%s+add%s+(.-)%s*$'));
+    elseif cmd:match('^/sms%s+togm%s+%S') or cmd:match('^/smartskillup%s+togm%s+%S') then
+        ensure_session();
+        toggle_module(cmd:match('^/%S+%s+togm%s+(%S+)%s*$'):lower());
     else
         return false;
     end

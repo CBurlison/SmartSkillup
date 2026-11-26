@@ -78,8 +78,12 @@ modules_order = T{ -- used to build the modules in a strict order
 }
 numerals = T{'',' II',' III',' IV',' V',' VI'}
 -- ASSUMPTION (unverified in game): Refresh's buff id is 43. Confirm by casting Refresh on self and checking /sms test get_buffs.
+-- ASSUMPTION (unverified in game): haste 33, composure 419 and sublimation 187 (activated; 188 is completed) come from Windower's status ids.
 buff_ids = buff_ids or T{
 	refresh = 43,
+	haste = 33,
+	composure = 419,
+	sublimation = 187,
 }
 -- FFXI container ids (Inventory, Satchel, Sack, Case), iterated inventory first.
 -- TODO(ashita): confirm these ids in game.

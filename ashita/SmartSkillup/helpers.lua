@@ -148,7 +148,7 @@ end
 -------------------------------------------------------------------------------------------------------------------
 -- Processes spells to determine if the player's main job can skill them up
 -------------------------------------------------------------------------------------------------------------------
-local function is_valid(spell, skill_en, for_module) --half of this function came from SMD111
+function is_valid(spell, skill_en, for_module) --half of this function came from SMD111
 	if not known_spells[spell.id] then --player doesn't know
 		return false
 	elseif (not spell.levels[me.main_job_id] or spell.levels[me.main_job_id] > me.main_job_level) --mj can't cast
