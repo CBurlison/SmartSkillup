@@ -229,6 +229,44 @@ local function run_self_test()
         table.insert(parts, 'spell_by_name Dia->' .. tostring(dia and dia.id) .. ' Stone->' .. tostring(stone and stone.id));
         return table.concat(parts, ' | ');
     end);
+
+    -- Step 2 probes: buffs, status, and target entity fields used by the module logic.
+    check('get_buffs (shim)', function()
+        local ids = windower.ffxi.get_buffs();
+        return #ids .. ' buffs: ' .. table.concat(ids, ',');
+    end);
+    check('raw GetBuffs slots 0-31 (expect -1 for empty)', function()
+        local buffs = AshitaCore:GetMemoryManager():GetPlayer():GetBuffs();
+        local parts = {};
+        for i = 1, 32 do table.insert(parts, tostring(buffs[i])); end
+        return table.concat(parts, ',');
+    end);
+    check('get_status (shim) vs entity Status', function()
+        local ent = GetPlayerEntity();
+        return 'shim=' .. tostring(windower.ffxi.get_status()) .. ' entity=' .. tostring(ent and ent.Status);
+    end);
+    check('job ability lookups (id, recast_id, current recast)', function()
+        local sms_res = require('sms_res');
+        local recasts = windower.ffxi.get_ability_recasts();
+        local parts = {};
+        for _, name in ipairs({ 'Convert', 'Composure', 'Sublimation', 'Radial Arcana', 'Full Circle' }) do
+            local ab = sms_res.ability_by_name(name);
+            if ab then
+                table.insert(parts, name .. '=id ' .. ab.id .. '/recast ' .. tostring(ab.recast_id) .. '/now ' .. tostring(recasts[ab.recast_id]));
+            else
+                table.insert(parts, name .. '=nil');
+            end
+        end
+        return table.concat(parts, ' | ');
+    end);
+    check('target entity Distance/SpawnFlags (set a target first)', function()
+        local t = AshitaCore:GetMemoryManager():GetTarget():GetTargetIndex(0);
+        t = t ~= 0 and GetEntity(t) or nil;
+        if not t then return 'no target'; end
+        local sqrt_dist = math.sqrt(t.Distance);
+        return t.Name .. ' Distance=' .. tostring(t.Distance) .. ' (sqrt=' .. string.format('%.1f', sqrt_dist)
+            .. ') SpawnFlags=0x' .. string.format('%X', t.SpawnFlags) .. ' spawn_type=' .. tostring(windower.ffxi.get_mob_by_target('t').spawn_type);
+    end);
 end
 
 -- Builds the session data the loop needs (same order as the self test).

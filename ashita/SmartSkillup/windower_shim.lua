@@ -135,10 +135,30 @@ local function get_ability_recasts()
     return out
 end
 
+-- Active buff ids. IPlayer:GetBuffs() returns an int16 array; empty slots hold -1.
+local function get_buffs()
+    local player = AshitaCore:GetMemoryManager():GetPlayer()
+    local out = {}
+    if not player then return out end
+    local buffs = player:GetBuffs()
+    -- GetBuffs() is 1-based from Lua: slot 0 is nil, slots 1-32 hold buff ids, empty slots are -1.
+    for i = 1, 32 do
+        local id = buffs[i]
+        if id and id > 0 then out[#out + 1] = id end
+    end
+    return out
+end
+
+-- Player status code (0 idle, 1 engaged, 33 resting), matching Windower's get_player().status.
+local function get_status()
+    local player = GetPlayerEntity()
+    return player and player.Status or 0
+end
+
 local function get_mob_by_target(target)
     if target == 't' then
-        local player = GetPlayerEntity()
-        return player and entity_to_mob(player.TargetIndex) or nil
+        local index = AshitaCore:GetMemoryManager():GetTarget():GetTargetIndex(0)
+        return entity_to_mob(index)
     end
     local slot = target and target:match('^p(%d)$')
     if slot then
@@ -238,6 +258,8 @@ function shim.install()
         get_spells = get_spells,
         get_spell_recasts = get_spell_recasts,
         get_ability_recasts = get_ability_recasts,
+        get_buffs = get_buffs,
+        get_status = get_status,
         get_mob_by_index = entity_to_mob,
         get_mob_by_target = get_mob_by_target,
     }

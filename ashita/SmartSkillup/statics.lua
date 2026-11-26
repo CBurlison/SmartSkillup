@@ -77,6 +77,10 @@ modules_order = T{ -- used to build the modules in a strict order
 	'sublim',
 }
 numerals = T{'',' II',' III',' IV',' V',' VI'}
+-- ASSUMPTION (unverified in game): Refresh's buff id is 43. Confirm by casting Refresh on self and checking /sms test get_buffs.
+buff_ids = buff_ids or T{
+	refresh = 43,
+}
 -- FFXI container ids (Inventory, Satchel, Sack, Case), iterated inventory first.
 -- TODO(ashita): confirm these ids in game.
 bags_ordered = T{0, 5, 6, 7}

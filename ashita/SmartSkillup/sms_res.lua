@@ -4,7 +4,7 @@
 local M = {};
 
 -- Bump this when sms_res changes so /sms test shows which copy is loaded.
-M.build = 'loop-v1';
+M.build = 'probe-step2-v3';
 
 -- Returns the item id for an English item name, or nil when the name is unknown.
 function M.item_id_by_name(name)
@@ -87,6 +87,22 @@ local function build_spell_name_index()
         end
     end
     return index;
+end
+
+-- Returns { id, en, recast_id, mp_cost, targets } for a job ability or weapon skill name, or nil when unknown.
+-- recast_id is IAbility.RecastTimerId, the index used with get_ability_recasts().
+function M.ability_by_name(name)
+    local ability = AshitaCore:GetResourceManager():GetAbilityByName(name, 0);
+    if not ability or ability.Id == nil or ability.Id == 0 then
+        return nil;
+    end
+    return {
+        id = ability.Id,
+        en = ability.Name and ability.Name[1] or name,
+        recast_id = ability.RecastTimerId,
+        mp_cost = ability.ManaCost,
+        targets = spell_targets(ability.Targets),
+    };
 end
 
 -- Returns { id, en, mp_cost, recast_delay, skill_id } or nil when the name is unknown.
