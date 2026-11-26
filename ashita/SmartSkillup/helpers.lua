@@ -9,6 +9,8 @@ valid_spells_sorted = valid_spells_sorted or T{}
 ignored_spells = ignored_spells or T{}
 known_spells = known_spells or T{}
 main_skills = main_skills or T{}
+-- Ashita entity status ids (Windower used the strings 'Engaged' and 'Resting').
+ENGAGED_STATUS = 1
 
 -- UI is not ported yet; ui.* calls are no-ops until the ImGui pass.
 ui = ui or setmetatable({}, { __index = function() return function() end end })
@@ -102,7 +104,7 @@ toggle_to_next_skill = function(cap_event)
 		return coroutine.schedule(function()
 			logger(chat_colors.yellow, '[END OF SESSION] No skills remain in the current session. Ending session...')
 			if cap_event and auto_shutdown then
-				if me.status == 'Engaged' then
+				if windower.ffxi.get_status() == ENGAGED_STATUS then
 					me.shutdown_awaiting_disengage = true
 				else
 					windower.send_command('input /shutdown')

@@ -125,4 +125,18 @@ function M.spell_by_name(name)
     };
 end
 
+-- Returns { id, en, cast_time (seconds), skill } for a spell id, or nil. Ashita stores CastTime in quarter seconds.
+function M.spell_by_id(id)
+    local spell = AshitaCore:GetResourceManager():GetSpellById(id);
+    if not spell or not spell.Name or not spell.Name[1] or spell.Name[1] == '' then
+        return nil;
+    end
+    return {
+        id = id,
+        en = spell.Name[1],
+        cast_time = spell.CastTime / 4.0,
+        skill = spell.Skill,
+    };
+end
+
 return M;

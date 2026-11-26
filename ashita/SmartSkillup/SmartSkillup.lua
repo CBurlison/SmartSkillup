@@ -21,7 +21,13 @@ ashita.events.register('load', 'smartskillup_load', function()
     require('modules');
     require('sms_loop');
     windower.register_event('incoming chunk', function(id, data)
-        if id == 0x062 and not check_job_change() then process_skill_packet(data); end
+        if id == 0x062 then
+            if not check_job_change() then process_skill_packet(data); end
+        elseif id == 0x028 and me.id then
+            process_action(require('action_packets').parse_action(data));
+        elseif id == 0x029 and me.id then
+            process_action_message(require('action_packets').parse_action_message(data));
+        end
     end);
     skill_data_request_timeout();
 
@@ -361,6 +367,14 @@ local function dispatch(cmd)
         active, going, paused = false, false, false;
         end_timeout_and_decision('command stop');
         print('[SmartSkillup] Stopped.');
+    elseif cmd:match('^/sms%s+debug%s*%S*%s*$') or cmd:match('^/smartskillup%s+debug%s*%S*%s*$') then
+        local mode = (cmd:match('^/%S+%s+debug%s+(%S+)') or 'norm'):lower();
+        if debugModes[mode] == nil then
+            print('[SmartSkillup] No "' .. mode .. '" debug mode exists. Use "norm" or "deep".');
+        else
+            debugModes[mode] = not debugModes[mode];
+            print('[SmartSkillup] Debug mode "' .. mode .. '" is now ' .. (debugModes[mode] and 'ON' or 'OFF') .. '.');
+        end
     elseif cmd:match('^/sms%s+add%s+%S') or cmd:match('^/smartskillup%s+add%s+%S') then
         sms_add(cmd:match('^/%S+%s+add%s+(.-)%s*$'));
     elseif cmd:match('^/sms%s+togm%s+%S') or cmd:match('^/smartskillup%s+togm%s+%S') then

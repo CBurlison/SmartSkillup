@@ -1,7 +1,8 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
--- use_module lives in modules.lua. Not ported yet: event pauses (only the timeout branch
--- of process_event runs), and auto-rest (decide_to_rest stops the loop instead).
+-- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here.
+-- Not ported yet: event pauses (NPC, zoning), food/moogle handling, and auto-rest (decide_to_rest stops the loop instead).
 
+local sms_res = require('sms_res');
 threads = threads or {};
 loop = loop or T{ issues = 0 };
 decision = decision or T{};
@@ -56,7 +57,6 @@ function end_timeout_and_decision(source, ...)
     if args[2] then logger(...); end
 end
 
--- Only the timeout branch is ported; real event handling (packets) is step 3.
 function process_event(event)
     local pauses = {};
     for name, value in pairs(event_pauses) do
@@ -71,6 +71,86 @@ function process_event(event)
     if event.timeout then
         logger(chat_colors.purple, '[TIMEOUT] Making a new decision.', true);
         make_decision(event.source);
+        return;
+    end
+
+    local reason = event.stage:upper() .. ' EVENT' .. larr .. (event.res and event.res.en or event.name):upper();
+    -- MIDCAST: AN ACTION STARTED (wait for the cast to finish before the next decision)
+    if event.stage == 'midcast' then
+        decision.stage = 'midcast';
+        local cast_time = event.res and event.res.cast_time or 0;
+        local aftercast_delay = cast_time * (buffactive.Addle and 1.2 or 1) + 2.5;
+        end_timeout_and_decision(reason);
+        logger(chat_colors.purple, '[' .. reason .. '] Scheduled a timeout in ' .. aftercast_delay .. ' secs.', true);
+        start_timeout(aftercast_delay, reason);
+
+    -- AFTERCAST: AN ACTION ENDED
+    elseif event.stage == 'aftercast' and not me.moving then
+        decision.stage = 'aftercast';
+        increment_casts(event);
+        end_timeout_and_decision(reason); -- interrupts skip midcast, so the pending timeout is cleared here too
+        schedule_decision(2, reason, chat_colors.purple, '[' .. reason .. '] Scheduled a decision in 2 secs.', true);
+
+        -- TRACK ACTIVE INDICOLURE
+        if (event.name == 'Casting Completed' or event.name == 'Already Active') and event.res and event.res.en:sub(1, 5) == 'Indi-' then
+            me.indicolure = event.res.en;
+            logger(chat_colors.purple, '[INDICOLURE] "' .. event.res.en .. '" is active...', true);
+        end
+    end
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Action (0x028) and action message (0x029) handling, ported from Windower process_action and process_action_message_packet
+-------------------------------------------------------------------------------------------------------------------
+function process_action(act)
+    if not act.actor_id or act.actor_id ~= me.id then return; end
+    logger(chat_colors.purple, '[ACTION PACKET] category ' .. tostring(act.category) .. ', param ' .. tostring(act.param) .. ', targets ' .. #act.targets, true);
+
+    -- CASTING STARTED
+    if act.category == 8 and act.param ~= 28787 then
+        local target = act.targets[1];
+        local spell_id = target and target.actions[1] and target.actions[1].param;
+        process_event({ name = 'Casting Started', stage = 'midcast', timeout = false, res = spell_id and sms_res.spell_by_id(spell_id) });
+
+    -- CASTING INTERRUPTED
+    elseif act.category == 8 then
+        process_event({ name = 'Casting Interrupted', stage = 'aftercast', timeout = false });
+
+    -- CASTING COMPLETED
+    elseif act.category == 4 then
+        process_event({ name = 'Casting Completed', stage = 'aftercast', timeout = false, res = sms_res.spell_by_id(act.param) });
+
+    -- JOB ABILITY USED (ability names are not looked up yet, so no res is passed)
+    elseif act.category == 6 then
+        process_event({ name = 'Job Ability Used', stage = 'aftercast', timeout = false });
+
+    -- ITEM STARTED (item lookups are not ported yet, so no res is passed)
+    elseif act.category == 9 and act.param == 24931 then
+        process_event({ name = 'Item Started', stage = 'midcast', timeout = false });
+
+    -- ITEM INTERRUPTED
+    elseif act.category == 9 then
+        process_event({ name = 'Item Interrupted', stage = 'aftercast', timeout = false });
+
+    -- ITEM COMPLETED (food location updates are not ported yet)
+    elseif act.category == 5 then
+        process_event({ name = 'Item Completed', stage = 'aftercast', timeout = false });
+    end
+end
+
+function process_action_message(msg)
+    -- UNABLE TO CAST
+    if msg.message == 17 or msg.message == 18 then
+        process_event({ name = 'Unable to Cast', stage = 'aftercast', timeout = false });
+
+    -- EFFECT ALREADY ACTIVE
+    elseif msg.message == 523 then
+        process_event({ name = 'Already Active', stage = 'aftercast', timeout = false, res = sms_res.spell_by_id(msg.param1) });
+
+    -- SPELL LEARNED (standard and blue magic)
+    elseif msg.message == 23 or msg.message == 419 then
+        get_valid_spells();
+        logger(chat_colors.purple, '[SPELL LEARNED] Rebuilt valid spells.', true);
     end
 end
 
