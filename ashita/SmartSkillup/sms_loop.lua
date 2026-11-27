@@ -1,6 +1,6 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
--- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here.
--- Not ported yet: status pauses (resting, dead, cutscene), food/moogle handling, and auto-rest (decide_to_rest stops the loop instead).
+-- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here, as are status pauses and auto-rest.
+-- Not ported yet: food/moogle handling, and the battle target ('bt') rest check (Ashita has no battle target lookup in the shim).
 
 local sms_res = require('sms_res');
 threads = threads or {};
@@ -11,13 +11,41 @@ event_pauses = event_pauses or T{};
 active = active or false;
 going = going or false;
 paused = paused or false;
+auto_resting = auto_resting or false;
 force_stop_cast = force_stop_cast or false;
 
--- Auto-rest needs the engaged and claim checks, which are not ported yet. Stop the loop instead of resting.
-function decide_to_rest(source)
-    end_timeout_and_decision(source or 'decide_to_rest');
-    going = false;
-    logger(chat_colors.yellow, '[REST NEEDED] ' .. tostring(source) .. '. Auto-rest is not ported yet, so the loop has stopped. Rest, then use /sms go to resume.');
+-------------------------------------------------------------------------------------------------------------------
+-- A function where we decide whether or not to rest after running out of MP or make_decision tries
+-------------------------------------------------------------------------------------------------------------------
+function decide_to_rest(source, give_countdown, override)
+    source = source or 'UNDEFINED';
+    logger(chat_colors.purple, '[DECIDE TO REST] Source: ' .. source, true);
+
+    -- RETURN: VALID TARGET
+    local target = windower.ffxi.get_mob_by_target('t');
+    if me.status == ENGAGED_STATUS then
+        return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest while engaged.');
+    elseif target and target.claimed and target.hpp > 0 then
+        return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest due to valid target "' .. target.name .. '".');
+    end
+
+    -- RETURN: MP NOT NEEDED
+    if not decision.out_of_mp and me.mpp > 30 then
+        return logger(chat_colors.purple, '[PROCESS RESTING] CANCEL: MP Needed flag is false and player MPP above 30.', true);
+    -- RETURN: ALREADY RESTING
+    elseif me.status == RESTING_STATUS or event_pauses.Resting then
+        return;
+    end
+
+    -- BEGIN RESTING
+    loop.issues = 0;
+    auto_resting = true;
+    end_timeout_and_decision(source);
+    if give_countdown then
+        initialize_healing_notice(10, source .. (override and ' <30% MP' or ''), true);
+    else
+        windower.send_command('input /heal');
+    end
     return true;
 end
 
@@ -218,6 +246,130 @@ function unpause_event(event, delay)
 end
 
 -------------------------------------------------------------------------------------------------------------------
+-- Status pauses, resting, and the healing notice (Windower's process_status_change and helpers)
+-- Status ids are the Windower/FFXI status codes. Only the names used in logs and pauses are listed.
+-------------------------------------------------------------------------------------------------------------------
+local STATUS_NAMES = {
+    [0] = 'Idle', [1] = 'Engaged', [2] = 'Dead', [3] = 'Engaged dead', [4] = 'Event', [5] = 'Chocobo',
+    [8] = 'Door Opening', [9] = 'Door Closing', [10] = 'Elevator Up', [11] = 'Elevator Down',
+    [33] = 'Resting', [34] = 'Locked', [44] = 'Crafting', [47] = 'Sitting', [48] = 'Kneeling', [85] = 'Mount',
+};
+
+local function status_name(id)
+    return STATUS_NAMES[id] or ('Status ' .. id);
+end
+
+local function process_status_events(newStatusId, oldStatusId)
+    -- STATUS PAUSE EVENTS -- Dead, Chocobo, Cutscene, Resting, etc
+    if newStatusId > 1 then
+        if newStatusId == RESTING_STATUS then terminate_healing_notice('Status change'); end
+        pause_event(status_name(newStatusId));
+    end
+    if oldStatusId and oldStatusId > 1 then
+        unpause_event(status_name(oldStatusId), 1);
+    end
+end
+
+local function processing_resting_change(newStatusId, oldStatusId)
+    if not active or paused then return; end
+    if newStatusId ~= RESTING_STATUS and oldStatusId ~= RESTING_STATUS then return; end
+
+    -- STARTED RESTING
+    if newStatusId == RESTING_STATUS then
+        me.healing_countdown_running = nil;
+        me.finish_rest_sent = nil;
+        if auto_resting or me.mpp < 70 then -- ignore rests where the player is apparently arbitrarily healing
+            logger(chat_colors.yellow, '[RESTING] Skillup will resume automatically when MP is full.');
+            auto_resting = true; -- will get up when full
+        end
+
+    -- GOT UP FROM RESTING
+    else
+        auto_resting = false;
+        me.getting_up = true; -- used to track get-up animation lock
+        coroutine.schedule(function() me.getting_up = nil; end, 1.5);
+    end
+end
+
+function initialize_healing_notice(total_delay, reason, first)
+    me.healing_countdown_running = true;
+    total_delay = total_delay or 9; -- total time till alert expires
+    local next_tick = total_delay <= 3 and 1 or math.fmod(total_delay, 3) == 0 and 3 or math.fmod(total_delay, 3) + 3;
+    if total_delay > 0 then
+        logger(chat_colors.yellow, '[RESTING SCHEDULED] Beginning a resting session in ' .. total_delay .. ' seconds...' .. (first and ' (Reason: ' .. reason .. ')' or ''));
+        threads.healing_notice = initialize_healing_notice:schedule(next_tick, total_delay - next_tick, reason);
+    else
+        auto_resting = true;
+        me.healing_countdown_running = nil;
+        windower.send_command('input /heal');
+    end
+end
+
+function terminate_healing_notice(reason)
+    if threads.healing_notice then
+        pcall(coroutine.close, threads.healing_notice);
+        threads.healing_notice = nil;
+    end
+    if me.healing_countdown_running then
+        me.healing_countdown_running = nil;
+        logger(chat_colors.yellow, '[RESTING CANCELLED] Cancelled the scheduled healing session.' .. (reason and ' (Reason: ' .. reason .. ')' or ''));
+    end
+end
+
+function process_status_change(newStatusId, oldStatusId)
+    process_status_events(newStatusId, oldStatusId);
+    processing_resting_change(newStatusId, oldStatusId);
+
+    if not active then return; end
+    if oldStatusId == RESTING_STATUS and not paused then
+        me.getting_up = true;
+        coroutine.schedule(function() me.getting_up = nil; end, 3);
+    end
+
+    -- PLAYER IS ENGAGED
+    if newStatusId == ENGAGED_STATUS then
+        terminate_healing_notice('Player engaged');
+        if not paused then
+            begin_loop('PLAYER ENGAGED', true);
+        end
+
+    -- DISENGAGEMENT
+    elseif newStatusId == 0 and oldStatusId == ENGAGED_STATUS then
+        if me.shutdown_awaiting_disengage then
+            windower.send_command:schedule(2, 'input /shutdown');
+            return logger(chat_colors.yellow, '[AUTO-SHUTDOWN] Performing the requested /shutdown.');
+        end
+
+        local override = not auto_resting and me.mpp < 30;
+        if auto_resting or override then
+            decide_to_rest('Player disengaged', true, override);
+        end
+    end
+end
+
+-- Polled from the d3d_present tick, since the status packets are not ported. Detects status changes and ends auto-rest at full MP.
+function check_status_change()
+    if not me.id then return; end
+    local new_id = windower.ffxi.get_status();
+    local old_id = me.status;
+    if new_id ~= old_id then
+        me.status = new_id;
+        update_me_vitals();
+        process_status_change(new_id, old_id);
+    end
+
+    -- END OF RESTING SESSION
+    if new_id == RESTING_STATUS and active and auto_resting and not me.finish_rest_sent then
+        update_me_vitals();
+        if me.mpp == 100 then
+            me.finish_rest_sent = true;
+            logger(chat_colors.purple, '[HEALING FINISHED] Sending the "//sms go" command to continue.', true);
+            windower.send_command('sms go "Finished healing"');
+        end
+    end
+end
+
+-------------------------------------------------------------------------------------------------------------------
 -- A function to handle processing requests to begin the loop and the situational actions required to do so correctly
 -------------------------------------------------------------------------------------------------------------------
 function begin_loop(source, notify)
@@ -235,6 +387,19 @@ function begin_loop(source, notify)
     -- ACTIVATE UI TEXT
     active = true;
     ui.active(true);
+
+    -- RETURN: NEED TO START GETTING UP
+    if event_pauses.Resting and not me.getting_up then
+        me.getting_up = true;
+        windower.send_command('input /heal');
+        end_timeout_and_decision(source, chat_colors.purple, '[NEW LOOP] Ending any scheduled timeout and decision...', true);
+        schedule_decision(3, source .. '+GET UP');
+        return logger(chat_colors.green, '[' .. verbiage[1] .. '] Getting up and ' .. verbiage[2] .. ' in 3 seconds...');
+
+    -- RETURN: GET UP FASTER (just wait, the get-up unpause resumes the loop)
+    elseif event_pauses.Resting then
+        return logger(chat_colors.green, '[START] Resuming skillup session...');
+    end
 
     -- RETURN: AWAITING EVENT PAUSES
     if next(event_pauses) ~= nil then

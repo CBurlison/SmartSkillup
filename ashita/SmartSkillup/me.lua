@@ -1,5 +1,5 @@
 -- Ported from the Windower me.lua (Copyright 2022, RolandJ, BSD 3-Clause; see the original in the repo root).
--- Vitals, job and food data come from polling the shim. Packet- and event-driven updates are TODO.
+-- Vitals, job, status and food data come from polling the shim. Packet- and event-driven updates are TODO.
 
 local compat = require('sms_compat')
 
@@ -31,7 +31,7 @@ function build_me_table()
 	me.main_job_id, me.main_job, me.main_job_level = p.main_job_id, p.main_job, p.main_job_level
 	me.sub_job_id, me.sub_job, me.sub_job_level = p.sub_job_id, p.sub_job, p.sub_job_level
 	me.JA_locked = false
-	me.status = nil -- TODO(ashita): status and buff changes come from packets, not polling
+	me.status = windower.ffxi.get_status() -- status changes are polled by check_status_change
 
 	-- TODO(ashita): zone name lookup for the cities check; treated as not in town until ported
 	me.in_town = false

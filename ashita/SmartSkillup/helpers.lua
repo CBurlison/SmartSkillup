@@ -10,6 +10,7 @@ known_spells = known_spells or T{}
 main_skills = main_skills or T{}
 -- Ashita entity status ids (Windower used the strings 'Engaged' and 'Resting').
 ENGAGED_STATUS = 1
+RESTING_STATUS = 33
 
 -- UI is not ported yet; ui.* calls are no-ops until the ImGui pass.
 ui = ui or setmetatable({}, { __index = function() return function() end end })

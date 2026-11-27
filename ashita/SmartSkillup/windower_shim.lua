@@ -72,6 +72,8 @@ local function entity_to_mob(index)
         hpp = ent.HPPercent,
         distance = ent.Distance,
         spawn_type = spawn_type_from_flags(ent.SpawnFlags),
+        -- Ashita only exposes ClaimStatus, not the claimer's id, so this is "claimed by anyone".
+        claimed = (ent.ClaimStatus or 0) ~= 0,
     }
 end
 

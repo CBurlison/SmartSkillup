@@ -25,8 +25,6 @@ ashita.events.register('load', 'smartskillup_load', function()
             if not check_job_change() then process_skill_packet(data); end
         elseif id == 0x028 and me.id then
             process_action(require('action_packets').parse_action(data));
-        elseif id == 0x028 and me.id then
-            process_action(require('action_packets').parse_action(data));
         elseif id == 0x029 and me.id then
             process_action_message(require('action_packets').parse_action_message(data));
         elseif S{0x032, 0x033, 0x034}:contains(id) then
@@ -54,8 +52,9 @@ ashita.events.register('load', 'smartskillup_load', function()
         if now - last_job_check < 0.5 then return; end
         last_job_check = now;
         check_job_change();
+        check_status_change();
     end);
-    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop and modules are ported; events and auto-rest are not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
+    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop, modules, events, status pauses and auto-rest are ported; food and moogle handling are not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
 end);
 
 ashita.events.register('unload', 'smartskillup_unload', function()
@@ -380,7 +379,7 @@ end
 local function dispatch(cmd)
     if cmd:match('^/smartskillup%s+test%s*$') or cmd:match('^/sms%s+test%s*$') then
         run_self_test();
-    elseif cmd:match('^/sms%s+go%s*$') or cmd:match('^/smartskillup%s+go%s*$') then
+    elseif cmd:match('^/sms%s+go%s*$') or cmd:match('^/smartskillup%s+go%s*$') or cmd:match('^/sms%s+go%s+".*"%s*$') or cmd:match('^/smartskillup%s+go%s+".*"%s*$') then
         ensure_session();
         begin_loop('command');
     elseif cmd:match('^/sms%s+stop%s*$') or cmd:match('^/smartskillup%s+stop%s*$') then
@@ -407,7 +406,7 @@ local function dispatch(cmd)
 end
 
 shim.set_self_command_handler(function(cmd)
-    dispatch(cmd);
+    dispatch('/' .. cmd);
 end);
 
 ashita.events.register('command', 'smartskillup_command', function(e)
