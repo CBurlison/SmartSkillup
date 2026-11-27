@@ -20,17 +20,9 @@ function decide_to_rest(source, give_countdown, override)
     source = source or 'UNDEFINED';
     logger(chat_colors.purple, '[DECIDE TO REST] Source: ' .. source, true);
 
-    -- RETURN: VALID TARGET
-    local target = windower.ffxi.get_mob_by_target('t');
+    -- RETURN: ENGAGED
     if me.status == ENGAGED_STATUS then
         return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest while engaged.');
-    elseif target and target.claimed and target.hpp > 0 then
-        return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest due to valid target "' .. target.name .. '".');
-    end
-
-    local battle_target = windower.ffxi.get_mob_by_target('bt');
-    if battle_target and battle_target.spawn_type == 16 and battle_target.hpp > 0 and math.sqrt(battle_target.distance) < 20 then
-        return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest due to valid target "' .. battle_target.name .. '".');
     end
 
     -- RETURN: MP NOT NEEDED
@@ -512,7 +504,10 @@ function make_decision(source) -- must be global to both A) be called from above
         elseif me.mp < spell.mp_cost + (me.convert_ready and 1 or 0) then -- ensure 1 MP is left if convert is viable
             logger(chat_colors.red, '[MP NEEDED] Insufficient MP for next spell "' .. spell.en .. '" (MP: ' .. me.mp .. '/' .. spell.mp_cost .. ')');
             decision.out_of_mp = true;
-            return decide_to_rest('Out of MP');
+            if decide_to_rest('Out of MP') then return true; end
+            -- Rest was blocked (player engaged), so retry instead of stalling the loop
+            schedule_decision(4, 'OUT OF MP RETRY');
+            return;
 
         else
             -- RESOLVE TARGET STRING (<me>, <p1>, <t>)
