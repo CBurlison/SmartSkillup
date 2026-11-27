@@ -84,11 +84,13 @@ buff_ids = buff_ids or T{
 	haste = 33,
 	composure = 419,
 	sublimation = 187,
+	food = 251, -- confirmed by the autobox and xiui addons (bufftable: 251 = FOOD)
 }
 -- FFXI container ids (Inventory, Satchel, Sack, Case), iterated inventory first.
 -- Matches the player bag ids used by the autobox addon (PLAYER_ITEM_BAGS = {0,3,5,6,7}, where 3 is temporary and skipped here).
 -- Confirmed in game: /sms test reports max=80 for bags 0, 5, 6 and 7, and finds a B.E.W. Pitaru in the right bag.
 bags_ordered = T{0, 5, 6, 7}
+bag_names = T{[0] = 'Inventory', [5] = 'Satchel', [6] = 'Sack', [7] = 'Case'}
 skillup_foods = T{ -- magic skillup foods, indexed by potency for ipairs usage
     T{id = sms_res.item_id_by_name('B.E.W. Pitaru'),  en = 'B.E.W. Pitaru'},  -- 80%
     T{id = sms_res.item_id_by_name('Seafood Pitaru'), en = 'Seafood Pitaru'}, -- 60%

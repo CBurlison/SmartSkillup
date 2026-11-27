@@ -164,7 +164,7 @@ function update_me_food_locations(immediate, item_used)
 
 	-- DROP FOOD MODULE IF APPLICABLE
 	if not me.has_skillup_food and modules and modules.food and modules.food.active then
-		windower.send_command('sms togm silent food')
+		modules.food.active = false
 		logger(chat_colors.red, '[FOOD MODULE DEACTIVATED] No more skillup food in available bags.')
 	end
 end

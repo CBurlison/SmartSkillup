@@ -1,6 +1,6 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
 -- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here, as are status pauses and auto-rest.
--- Not ported yet: food/moogle handling.
+-- Not ported yet: moogle handling.
 
 local sms_res = require('sms_res');
 threads = threads or {};
@@ -165,7 +165,7 @@ function process_action(act)
     elseif act.category == 9 then
         process_event({ name = 'Item Interrupted', stage = 'aftercast', timeout = false });
 
-    -- ITEM COMPLETED (food location updates are not ported yet)
+    -- ITEM COMPLETED (food locations refresh on a timer in use_module, not on this event)
     elseif act.category == 5 then
         process_event({ name = 'Item Completed', stage = 'aftercast', timeout = false });
     end

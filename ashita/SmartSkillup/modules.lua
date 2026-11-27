@@ -1,6 +1,6 @@
 -- Ported from the Windower SmartSkillup.lua/helpers.lua module logic (determine_modules, use_module, update_best_cures).
--- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation, MP Limit.
--- Not ported yet: Food, Moogle, T.Target, Geo-Refresh, Radial Arcana (they are never available).
+-- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation, MP Limit, Food.
+-- Not ported yet: Moogle, T.Target, Geo-Refresh, Radial Arcana (they are never available).
 
 local sms_res = require('sms_res');
 
@@ -115,6 +115,7 @@ function determine_modules()
         convert = new_module('convert', 'Convert', sms_res.ability_by_name('Convert'), 'ja'),
         compo = new_module('compo', 'Compos.', sms_res.ability_by_name('Composure'), 'ja'),
         sublim = new_module('sublim', 'Sublim.', sms_res.ability_by_name('Sublimation'), 'ja'),
+        food = new_module('food', 'Food', nil, nil),
         mp_limit = new_module('mp_limit', 'MP Limit', nil, nil),
     };
 
@@ -123,6 +124,7 @@ function determine_modules()
     modules.convert.available = has_job('RDM', 40) and modules.convert.res ~= nil;
     modules.compo.available = me.main_job == 'RDM' and me.main_job_level >= 50 and modules.compo.res ~= nil;
     modules.sublim.available = has_job('SCH', 35) and modules.sublim.res ~= nil;
+    modules.food.available = true;
     modules.mp_limit.available = true;
     modules.mp_limit.active = mp_limit ~= nil;
 
@@ -143,7 +145,7 @@ end
 function toggle_module(key)
     local mod = modules[key];
     if not mod or key == 'compo' then
-        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, mp_limit.');
+        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, food, mp_limit.');
     elseif not mod.available then
         return print('[SmartSkillup] Module "' .. mod.label .. '" is not available for your jobs.');
     end
@@ -251,6 +253,36 @@ function use_module()
             schedule_module_readiness(sublim);
             return true;
         end
+    end
+
+    -- SKILL UP FOOD MODULE (food locations are rebuilt every 30 secs, since bag changes are not hooked yet)
+    if modules.food.active and not buffidactive[buff_ids.food] then
+        if os.clock() >= (me.food_refresh_at or 0) then
+            me.food_refresh_at = os.clock() + 30;
+            update_me_food_locations(true);
+        end
+    end
+    if modules.food.active and not buffidactive[buff_ids.food] and me.has_skillup_food then
+        -- MAKE BEST FOOD AVAILABLE IF INVENTORY IS NOT FULL (the move completes on a later decision, then the food is used)
+        local best = me.best_overall_food;
+        if not me.inventory_full and best and best.en ~= (me.best_inventory_food or {}).en then
+            logger(chat_colors.yellow, '[FOOD MODULE] Moving your ' .. bag_names[best.bag] .. '\'s "' .. best.en .. '" to your inventory...');
+            windower.ffxi.get_item(best.bag, best.slot, 1);
+            me.food_refresh_at = 0;
+            return true;
+        end
+        local food = me.best_inventory_food;
+        if not food then
+            return false;
+        end
+        -- NOTIFY IF BEST FOOD UNAVAILABLE
+        if best and best.en ~= food.en then
+            logger(chat_colors.yellow, '[FOOD MODULE] Cannot access your ' .. bag_names[best.bag] .. '\'s "' .. best.en .. '". (' .. (best.id - 5888) * 20 .. '% boost)');
+        end
+        logger(chat_colors.grey, '[FOOD MODULE] Using magic skill up food "' .. food.en .. '". (' .. (food.id - 5888) * 20 .. '% boost)');
+        windower.send_command('input /item "' .. food.en .. '" <me>');
+        me.food_refresh_at = 0;
+        return true;
     end
 
     return false;

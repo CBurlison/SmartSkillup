@@ -235,6 +235,13 @@ local function get_items()
     return out
 end
 
+-- Windower's get_item(bag, slot, count): moves an item into the inventory with the 0x029 item-move packet.
+-- Layout copied from the autobox addon (it moves items the same way before /item). Pending in-game confirmation.
+local function get_item(bag, slot, count)
+    local packet = { 0x29, 0x06, 0, 0, count or 1, 0, 0, 0, bag, 0, slot, 0xFF };
+    AshitaCore:GetPacketManager():AddOutgoingPacket(0x29, packet);
+end
+
 local event_map = {
     ['outgoing chunk'] = 'packet_out',
     ['incoming chunk'] = 'packet_in',
@@ -272,6 +279,7 @@ function shim.install()
         get_player = get_player,
         get_party = get_party,
         get_items = get_items,
+        get_item = get_item,
         get_info = get_info,
         get_spells = get_spells,
         get_spell_recasts = get_spell_recasts,
