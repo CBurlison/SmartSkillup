@@ -53,6 +53,7 @@ ashita.events.register('load', 'smartskillup_load', function()
         last_job_check = now;
         check_job_change();
         check_status_change();
+        check_zone_change();
     end);
     print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop, modules, events, status pauses and auto-rest are ported; food and moogle handling are not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
 end);
@@ -194,6 +195,11 @@ local function run_self_test()
             if s.en == 'Cure' then parsed = s.levels[3]; break; end
         end
         return table.concat(lv, ' ') .. ' | parsed levels[3]=' .. tostring(parsed);
+    end);
+    check('zone + in_town', function()
+        if not me then build_me_table(); end
+        update_me_zone();
+        return 'zone=' .. tostring(me.zone) .. ' name=' .. tostring(me.zone_name) .. ' in_town=' .. tostring(me.in_town);
     end);
     check('build_me_table + get_main_skills + get_valid_spells', function()
         build_me_table();
@@ -379,6 +385,26 @@ local function sms_add(term, attempts)
     print('[SmartSkillup] Added "' .. match .. '" (level ' .. main_skills[match].level .. '). Session skills: ' .. table.concat(skills_to_skillup, ', '));
 end
 
+-- Handles /sms mplimit [silent] [toggle | <number>] (Windower's mplimit command).
+local function handle_mplimit(args)
+    local tokens = {};
+    local silent = false;
+    for word in args:gmatch('%S+') do
+        if word == 'silent' then silent = true; else table.insert(tokens, word); end
+    end
+    local action = tokens[1];
+    if action == nil then
+        return print('[SmartSkillup] MP Limit is ' .. tostring(mp_limit));
+    elseif action == 'toggle' then
+        toggle_mp_limit();
+    elseif tonumber(action) then
+        set_mp_limit(tonumber(action));
+    else
+        return print('[SmartSkillup] Usage: /sms mplimit [silent] [toggle | <number>].');
+    end
+    if not silent then print('[SmartSkillup] Set MP Limit to ' .. tostring(mp_limit)); end
+end
+
 -- Returns true when the command was one of ours, so the caller can block it.
 local function dispatch(cmd)
     if cmd:match('^/smartskillup%s+test%s*$') or cmd:match('^/sms%s+test%s*$') then
@@ -400,6 +426,8 @@ local function dispatch(cmd)
         end
     elseif cmd:match('^/sms%s+add%s+%S') or cmd:match('^/smartskillup%s+add%s+%S') then
         sms_add(cmd:match('^/%S+%s+add%s+(.-)%s*$'));
+    elseif cmd:match('^/%S+%s+mplimit$') or cmd:match('^/%S+%s+mplimit%s') then
+        handle_mplimit(cmd:match('^/%S+%s+mplimit%s*(.-)%s*$'));
     elseif cmd:match('^/sms%s+togm%s+%S') or cmd:match('^/smartskillup%s+togm%s+%S') then
         ensure_session();
         toggle_module(cmd:match('^/%S+%s+togm%s+(%S+)%s*$'):lower());

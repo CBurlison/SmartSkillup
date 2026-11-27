@@ -477,8 +477,9 @@ function make_decision(source) -- must be global to both A) be called from above
 
     -- PROCESS MP LIMIT ISSUE
     if mp_limit and spells_below_limit == 0 then
-        mp_limit = nil; -- the Windower 'sms mplimit toggle' is not ported yet; lift the limit
-        logger(chat_colors.yellow, '[MP LIMIT ISSUE] No "' .. skill_to_skillup .. '" spells available cheaper than the limit; limit lifted.');
+        local previous = mp_limit;
+        toggle_mp_limit();
+        logger(chat_colors.yellow, '[MP LIMIT ISSUE] No "' .. skill_to_skillup .. '" spells available cheaper than ' .. previous .. '; increasing limit to ' .. tostring(mp_limit) .. '.');
     end
 
     decision = T{ min_recast = 0 };
@@ -486,6 +487,15 @@ function make_decision(source) -- must be global to both A) be called from above
         -- CONTINUE: INDOCOLURE ALREADY ACTIVE
         if spell.en == me.indicolure then -- can't recast active indicolure
             logger(chat_colors.purple, 'SKIP: Skipping ' .. spell.en .. ', indicolure already active...', true);
+            if mp_limit and spells_below_limit == 1 then
+                toggle_mp_limit();
+                logger(chat_colors.yellow, '[MP LIMIT ISSUE] Increasing limit to allow a second indi spell.');
+            end
+
+        -- SKIP: SPELL OVER MP_LIMIT (MODULE); spells are weighted by cost and cast time, so cheaper spells may follow
+        elseif mp_limit and spell.mp_cost > mp_limit then
+            decision.over_mp_limit = true;
+            logger(chat_colors.purple, '[SPELL SKIP] Skipping "' .. spell.en .. '" due to being ' .. (spell.mp_cost - mp_limit) .. ' over the MP limit of ' .. mp_limit .. '.', false, true);
 
         -- CONTINUE: SPELL AWAITING RECAST
         elseif recast_of(spell) > 0 then
@@ -497,12 +507,6 @@ function make_decision(source) -- must be global to both A) be called from above
         elseif decision.best_spell and recast_of(decision.best_spell) / 60 < 1.2 and spell.mp_cost / decision.best_spell.mp_cost > 2 then
             decision.awaiting_more_efficient_spell = true;
             logger(chat_colors.purple, '[SPELL BREAK] Broke on "' .. spell.en .. '" due to comparison to "' .. decision.best_spell.en .. '"...', false, true);
-            break;
-
-        -- BREAK: SPELL OVER MP_LIMIT (MODULE)
-        elseif mp_limit and spell.mp_cost > mp_limit then
-            decision.over_mp_limit = true;
-            logger(chat_colors.purple, '[SPELL BREAK] Broke on "' .. spell.en .. '" due to being ' .. (spell.mp_cost - mp_limit) .. ' over the MP limit of ' .. mp_limit .. '.', false, true);
             break;
 
         -- RETURN: CHEAPEST SPELL TOO EXPENSIVE (NEED TO REST)

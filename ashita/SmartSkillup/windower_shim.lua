@@ -183,7 +183,9 @@ end
 
 local function get_info()
     local party = AshitaCore:GetMemoryManager():GetParty()
-    return { zone = party and party:GetMemberZone(0) or nil }
+    local zone = party and party:GetMemberZone(0) or nil
+    local zone_name = zone and AshitaCore:GetResourceManager():GetString('zones.names', zone) or nil
+    return { zone = zone, zone_name = zone_name }
 end
 
 local function get_party()

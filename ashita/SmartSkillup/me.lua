@@ -33,9 +33,7 @@ function build_me_table()
 	me.JA_locked = false
 	me.status = windower.ffxi.get_status() -- status changes are polled by check_status_change
 
-	-- TODO(ashita): zone name lookup for the cities check; treated as not in town until ported
-	me.in_town = false
-
+	update_me_zone()
 	update_me_party()
 	update_me_food_locations(true)
 	-- TODO(ashita): BLU spells (Windower used get_mjob_data), port once the spell list source is verified
@@ -43,6 +41,27 @@ function build_me_table()
 end
 
 
+
+-------------------------------------------------------------------------------------------------------------------
+-- Sets me.zone, me.zone_name and me.in_town (zone name is in the cities set)
+-------------------------------------------------------------------------------------------------------------------
+function update_me_zone()
+	local info = windower.ffxi.get_info() or {};
+	me.zone = info.zone;
+	me.zone_name = info.zone_name;
+	me.in_town = me.zone_name ~= nil and cities:contains(me.zone_name);
+end
+
+-------------------------------------------------------------------------------------------------------------------
+-- Called from the tick; refreshes the zone flags when the zone id changes
+-------------------------------------------------------------------------------------------------------------------
+function check_zone_change()
+	if not me or me.id == nil then return; end
+	local zone = (windower.ffxi.get_info() or {}).zone;
+	if zone ~= nil and zone ~= me.zone then
+		update_me_zone();
+	end
+end
 
 -------------------------------------------------------------------------------------------------------------------
 -- Rebuilds me's party table and sets the me.can_summon_trusts and me.has_trust_target flags

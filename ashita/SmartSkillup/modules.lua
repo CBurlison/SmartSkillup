@@ -1,5 +1,5 @@
 -- Ported from the Windower SmartSkillup.lua/helpers.lua module logic (determine_modules, use_module, update_best_cures).
--- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation.
+-- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation, MP Limit.
 -- Not ported yet: Food, Moogle, T.Target, Geo-Refresh, Radial Arcana (they are never available).
 
 local sms_res = require('sms_res');
@@ -77,6 +77,21 @@ function evaluate_composure_active()
         or (haste.active and not buffidactive[buff_ids.haste])) and true or false;
 end
 
+-- Sets the MP limit (nil when off) and keeps the MP Limit module flag in step with it.
+function set_mp_limit(value)
+    mp_limit = value;
+    if modules.mp_limit then modules.mp_limit.active = value ~= nil; end
+end
+
+-- Steps the MP limit through 10, 15, ... 50 and back to 10 (Windower 'sms mplimit toggle').
+function toggle_mp_limit()
+    local value = (mp_limit or 10);
+    value = (math.floor(value / 5) * 5) + 5;
+    if value > 50 then value = 10; end
+    set_mp_limit(value);
+    return value;
+end
+
 -- Works out which modules this job can use, keeping the active flags the user has already set.
 function determine_modules()
     known_spells = windower.ffxi.get_spells();
@@ -100,6 +115,7 @@ function determine_modules()
         convert = new_module('convert', 'Convert', sms_res.ability_by_name('Convert'), 'ja'),
         compo = new_module('compo', 'Compos.', sms_res.ability_by_name('Composure'), 'ja'),
         sublim = new_module('sublim', 'Sublim.', sms_res.ability_by_name('Sublimation'), 'ja'),
+        mp_limit = new_module('mp_limit', 'MP Limit', nil, nil),
     };
 
     modules.refresh.available = refresh_spell ~= nil;
@@ -107,6 +123,8 @@ function determine_modules()
     modules.convert.available = has_job('RDM', 40) and modules.convert.res ~= nil;
     modules.compo.available = me.main_job == 'RDM' and me.main_job_level >= 50 and modules.compo.res ~= nil;
     modules.sublim.available = has_job('SCH', 35) and modules.sublim.res ~= nil;
+    modules.mp_limit.available = true;
+    modules.mp_limit.active = mp_limit ~= nil;
 
     if modules.convert.available then
         update_best_cures();
@@ -125,9 +143,14 @@ end
 function toggle_module(key)
     local mod = modules[key];
     if not mod or key == 'compo' then
-        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim.');
+        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, mp_limit.');
     elseif not mod.available then
         return print('[SmartSkillup] Module "' .. mod.label .. '" is not available for your jobs.');
+    end
+
+    if key == 'mp_limit' then
+        set_mp_limit(mp_limit == nil and 10 or nil);
+        return print('[SmartSkillup] ' .. (mp_limit and 'Activated' or 'Deactivated') .. ' the "MP Limit" module.');
     end
 
     local adding = not mod.active;
