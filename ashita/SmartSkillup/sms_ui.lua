@@ -13,12 +13,17 @@ local force_layout = true;
 local dragging = false;
 
 local COLUMNS = 3;
-local BUTTON_WIDTH = 120;
-local HEADER_WIDTH = 90;
 local BUTTON_HEIGHT = 22;
+local BUTTON_PADDING = 8;
+local STEP_BUTTON_WIDTH = 24;
+local MIN_BUTTON_WIDTH = 60;
 local BLUE = { 0.25, 0.45, 0.85, 1.0 };
 local ORANGE = { 0.85, 0.50, 0.10, 1.0 };
 local MODULE_ORDER = { 'convert', 'refresh', 'haste', 'sublim', 'food', 'mp_limit', 'moogle', 't_target' };
+local MP_LIMIT_MIN = 5;
+local MP_LIMIT_MAX = 50;
+local MP_LIMIT_DEFAULT = 10;
+local MP_LIMIT_STEP = 5;
 
 settings.register('settings', 'smartskillup_settings_update', function(s)
     cfg = s;
@@ -29,17 +34,31 @@ local function scaled(value)
     return math.floor(value * cfg.scale + 0.5);
 end
 
-local function color_button(label, color, width)
+-- Buttons size to their label so long names (skills, AUTO-SHUTDOWN) are not cut off.
+local function button_width(label)
+    local text_width = imgui.CalcTextSize(label, true);
+    return math.max(scaled(MIN_BUTTON_WIDTH), math.floor(text_width + scaled(BUTTON_PADDING) * 2 + 0.5));
+end
+
+local function color_button(label, color)
     if color then imgui.PushStyleColor(ImGuiCol_Button, color); end
-    local clicked = imgui.Button(label, { scaled(width or BUTTON_WIDTH), scaled(BUTTON_HEIGHT) });
+    local clicked = imgui.Button(label, { button_width(label), scaled(BUTTON_HEIGHT) });
     if color then imgui.PopStyleColor(); end
     return clicked;
+end
+
+-- Small square button for the MP limit stepper; faded and ignores clicks when it cannot move further.
+local function step_button(label, enabled, command)
+    if not enabled then imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.4); end
+    local clicked = imgui.Button(label, { scaled(STEP_BUTTON_WIDTH), scaled(BUTTON_HEIGHT) });
+    if not enabled then imgui.PopStyleVar(); end
+    if clicked and enabled then windower.send_command(command); end
 end
 
 -- Geo-Refresh and Radial Arcana are not ported yet, so they are drawn faded and ignore clicks.
 local function disabled_button(label, tooltip)
     imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.4);
-    imgui.Button(label, { scaled(BUTTON_WIDTH), scaled(BUTTON_HEIGHT) });
+    imgui.Button(label, { button_width(label), scaled(BUTTON_HEIGHT) });
     imgui.PopStyleVar();
     if imgui.IsItemHovered() then
         imgui.BeginTooltip();
@@ -67,13 +86,13 @@ local function status_text()
 end
 
 local function draw_header()
-    if color_button('ON##sms_on', active and ORANGE or nil, HEADER_WIDTH) then windower.send_command('sms go'); end
+    if color_button('ON##sms_on', active and ORANGE or nil) then windower.send_command('sms go'); end
     imgui.SameLine();
-    if color_button('OFF##sms_off', nil, HEADER_WIDTH) then windower.send_command('sms stop'); end
+    if color_button('OFF##sms_off', nil) then windower.send_command('sms stop'); end
     imgui.SameLine();
-    if color_button('PAUSE##sms_pause', paused and ORANGE or nil, HEADER_WIDTH) then windower.send_command('sms pause'); end
+    if color_button('PAUSE##sms_pause', paused and ORANGE or nil) then windower.send_command('sms pause'); end
     imgui.SameLine();
-    if color_button('AUTO-SHUTDOWN##sms_as', auto_shutdown and ORANGE or nil, HEADER_WIDTH) then windower.send_command('sms autoshutdown'); end
+    if color_button('AUTO-SHUTDOWN##sms_as', auto_shutdown and ORANGE or nil) then windower.send_command('sms autoshutdown'); end
     imgui.TextUnformatted(status_text());
 end
 
@@ -113,9 +132,14 @@ local function draw_modules()
             end
             if key == 'mp_limit' then
                 imgui.SameLine();
-                if color_button('Limit: ' .. tostring(mp_limit or 10) .. '##mp_limit_value', nil) then
-                    windower.send_command('sms mplimit toggle');
-                end
+                local value = mp_limit or MP_LIMIT_DEFAULT;
+                step_button('-##mp_limit_minus', value > MP_LIMIT_MIN,
+                    'sms mplimit ' .. math.max(MP_LIMIT_MIN, value - MP_LIMIT_STEP));
+                imgui.SameLine();
+                imgui.TextUnformatted(tostring(value));
+                imgui.SameLine();
+                step_button('+##mp_limit_plus', value < MP_LIMIT_MAX,
+                    'sms mplimit ' .. math.min(MP_LIMIT_MAX, value + MP_LIMIT_STEP));
             end
         end
     end
