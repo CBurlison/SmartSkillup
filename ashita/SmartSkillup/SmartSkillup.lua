@@ -55,7 +55,7 @@ ashita.events.register('load', 'smartskillup_load', function()
         check_status_change();
         check_zone_change();
     end);
-    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop, modules (incl. food), events, status pauses and auto-rest are ported; moogle handling is not yet. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
+    print('[SmartSkillup] Loaded (build ' .. require('sms_res').build .. '). Loop, modules (incl. food, moogle, T.Target), events, status pauses and auto-rest are ported. Use /sms add <skill>, /sms togm <module>, /sms go, /sms stop.');
 end);
 
 ashita.events.register('unload', 'smartskillup_unload', function()

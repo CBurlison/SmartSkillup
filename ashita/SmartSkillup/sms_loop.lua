@@ -1,6 +1,5 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
--- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here, as are status pauses and auto-rest.
--- Not ported yet: moogle handling.
+-- use_module (including the Moogle and T.Target summons) lives in modules.lua. Cast and action packets (0x028/0x029) are handled here, as are status pauses and auto-rest.
 
 local sms_res = require('sms_res');
 threads = threads or {};

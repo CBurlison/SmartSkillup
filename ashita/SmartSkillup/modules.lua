@@ -1,10 +1,13 @@
 -- Ported from the Windower SmartSkillup.lua/helpers.lua module logic (determine_modules, use_module, update_best_cures).
--- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation, MP Limit, Food.
--- Not ported yet: Moogle, T.Target, Geo-Refresh, Radial Arcana (they are never available).
+-- Ported modules: Convert (with HP recovery), Composure, Refresh, Haste, Sublimation, MP Limit, Food, Moogle, T.Target.
+-- Not ported yet: Geo-Refresh, Radial Arcana (they are never available).
 
 local sms_res = require('sms_res');
 
 modules = modules or {};
+
+-- ISpell.Type for trust magic (as used by xiui's hotbar playerdata.lua).
+local TRUST_SPELL_TYPE = 8;
 
 local spell_index = nil;
 -- Finds a spell by its exact English name from the resource manager, shaped for is_valid().
@@ -117,8 +120,12 @@ function determine_modules()
         sublim = new_module('sublim', 'Sublim.', sms_res.ability_by_name('Sublimation'), 'ja'),
         food = new_module('food', 'Food', nil, nil),
         mp_limit = new_module('mp_limit', 'MP Limit', nil, nil),
+        moogle = new_module('moogle', 'Moogle', find_spell('Moogle'), 'ma'),
+        t_target = new_module('t_target', 'T.Target', nil, nil),
     };
 
+    modules.moogle.available = modules.moogle.res ~= nil and known_spells[modules.moogle.res.id] ~= nil;
+    modules.t_target.available = true;
     modules.refresh.available = refresh_spell ~= nil;
     modules.haste.available = haste_spell ~= nil;
     modules.convert.available = has_job('RDM', 40) and modules.convert.res ~= nil;
@@ -145,7 +152,7 @@ end
 function toggle_module(key)
     local mod = modules[key];
     if not mod or key == 'compo' then
-        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, food, mp_limit.');
+        return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, food, mp_limit, moogle, t_target.');
     elseif not mod.available then
         return print('[SmartSkillup] Module "' .. mod.label .. '" is not available for your jobs.');
     end
@@ -165,6 +172,12 @@ function toggle_module(key)
         modules.sublim.active = false;
     elseif adding and key == 'sublim' and modules.refresh.available then
         modules.refresh.active = false;
+    elseif adding and (key == 'moogle' or key == 't_target') then
+        if not me.can_summon_trusts then
+            print('[SmartSkillup] Your character can\'t summon trusts due to party composition.');
+        elseif me.in_town then
+            print('[SmartSkillup] Your character can\'t summon trusts due to being in ' .. me.in_town .. '.');
+        end
     end
 
     mod.active = adding;
@@ -191,6 +204,36 @@ function use_module()
     evaluate_composure_active();
     local convert, compo, refresh, haste, sublim = modules.convert, modules.compo, modules.refresh, modules.haste, modules.sublim;
     local resting = windower.ffxi.get_status() == RESTING_STATUS;
+
+    -- MOOGLE/TRUST-TARGET IN-TOWN NOTICE
+    if me.in_town and me.can_summon_trusts then
+        if modules.t_target.active and not me.has_trust_target then
+            logger(chat_colors.yellow, '[TRUST TARGET MODULE] Please move out of a city in order to summon a trust to target...');
+        elseif modules.moogle.active and not me.party:find(modules.moogle.res.en) then
+            logger(chat_colors.yellow, '[MOOGLE MODULE] Please move out of a city in order to summon Moogle...');
+        end
+    end
+
+    -- TODO(ashita, unverified in game): Moogle and T.Target summons. Trust detection (ISpell.Type 8) and the Moogle spell id are unconfirmed.
+    -- TRUST TARGET SUMMON MODULE
+    if modules.t_target.active and me.can_summon_trusts and not me.has_trust_target and not me.in_town then
+        local spell_recasts = windower.ffxi.get_spell_recasts();
+        for _, spell in ipairs(sms_res.all_spells()) do
+            if spell.type == TRUST_SPELL_TYPE and known_spells[spell.id] and (spell_recasts[spell.id] or 0) == 0 then
+                logger(chat_colors.grey, '[TRUST TARGET MODULE] Summoning "' .. spell.en .. '" as a trust target...');
+                if me.main_job_level < 99 then
+                    logger(chat_colors.yellow, '[NOTICE] You are not ilvl, so your mileage with this module may vary.');
+                end
+                windower.send_command('input /ma "' .. spell.en .. '"');
+                return true;
+            end
+        end
+
+    -- MOOGLE MODULE
+    elseif modules.moogle.active and me.can_summon_trusts and not me.party:find(modules.moogle.res.en) and not me.in_town then
+        windower.send_command('input /ma "' .. modules.moogle.res.en .. '"');
+        return true;
+    end
 
     -- CONVERT MODULE
     if convert.active and not me.JA_locked and me.mpp < 25 and me.mp > 0 and convert.ready then

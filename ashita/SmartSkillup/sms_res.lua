@@ -50,6 +50,7 @@ function M.all_spells()
                 id = id,
                 en = spell.Name[1],
                 skill = spell.Skill,
+                type = spell.Type,
                 levels = levels,
                 mp_cost = spell.ManaCost,
                 cast_time = spell.CastTime,
