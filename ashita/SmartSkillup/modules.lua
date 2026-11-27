@@ -6,9 +6,6 @@ local sms_res = require('sms_res');
 
 modules = modules or {};
 
--- Ashita entity status for resting (Windower used the string 'Resting'). Unverified in game.
-local RESTING_STATUS = 33;
-
 local spell_index = nil;
 -- Finds a spell by its exact English name from the resource manager, shaped for is_valid().
 local function find_spell(name)

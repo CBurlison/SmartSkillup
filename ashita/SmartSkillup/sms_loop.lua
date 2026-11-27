@@ -1,6 +1,6 @@
 -- Ported from the Windower SmartSkillup.lua decision loop (timeouts, make_decision, begin_loop).
 -- use_module lives in modules.lua. Cast and action packets (0x028/0x029) are handled here, as are status pauses and auto-rest.
--- Not ported yet: food/moogle handling, and the battle target ('bt') rest check (Ashita has no battle target lookup in the shim).
+-- Not ported yet: food/moogle handling.
 
 local sms_res = require('sms_res');
 threads = threads or {};
@@ -27,6 +27,11 @@ function decide_to_rest(source, give_countdown, override)
         return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest while engaged.');
     elseif target and target.claimed and target.hpp > 0 then
         return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest due to valid target "' .. target.name .. '".');
+    end
+
+    local battle_target = windower.ffxi.get_mob_by_target('bt');
+    if battle_target and battle_target.spawn_type == 16 and battle_target.hpp > 0 and math.sqrt(battle_target.distance) < 20 then
+        return logger(chat_colors.yellow, '[MP NEEDED] Cannot rest due to valid target "' .. battle_target.name .. '".');
     end
 
     -- RETURN: MP NOT NEEDED

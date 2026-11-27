@@ -75,7 +75,9 @@ local function run_self_test()
         elseif type(result) == 'table' then
             local count = 0;
             for _ in pairs(result) do count = count + 1; end
-            print('[SmartSkillup][TEST] OK   ' .. label .. ' (table, ' .. count .. ' entries)');
+            local detail = '';
+            if result.name then detail = ' name=' .. tostring(result.name) .. ' index=' .. tostring(result.index); end
+            print('[SmartSkillup][TEST] OK   ' .. label .. ' (table, ' .. count .. ' entries' .. detail .. ')');
         else
             print('[SmartSkillup][TEST] OK   ' .. label .. ' = ' .. tostring(result));
         end
@@ -94,6 +96,7 @@ local function run_self_test()
     check('get_spell_recasts', function() return windower.ffxi.get_spell_recasts(); end);
     check('get_ability_recasts', function() return windower.ffxi.get_ability_recasts(); end);
     check('get_mob_by_target t', function() return windower.ffxi.get_mob_by_target('t'); end);
+    check('get_mob_by_target bt', function() return windower.ffxi.get_mob_by_target('bt'); end);
     check('get_mob_by_target p1', function() return windower.ffxi.get_mob_by_target('p1'); end);
 
     -- Probes the spell resource fields the data layer will depend on.

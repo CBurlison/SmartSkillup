@@ -162,6 +162,12 @@ local function get_mob_by_target(target)
         local index = AshitaCore:GetMemoryManager():GetTarget():GetTargetIndex(0)
         return entity_to_mob(index)
     end
+    -- Battle target: the sub-target when one is active, otherwise the target (matches Windower's 'bt').
+    if target == 'bt' then
+        local t = AshitaCore:GetMemoryManager():GetTarget()
+        local index = t:GetIsSubTargetActive() ~= 0 and t:GetTargetIndex(1) or t:GetTargetIndex(0)
+        return entity_to_mob(index)
+    end
     local slot = target and target:match('^p(%d)$')
     if slot then
         local party = AshitaCore:GetMemoryManager():GetParty()
@@ -249,7 +255,7 @@ end
 function shim.install()
     windower = windower or {}
     windower.send_command = send_command
-    windower.add_to_chat = function(_, msg) log(msg) end
+    windower.add_to_chat = function(_, msg) print(tostring(msg)) end
     windower.convert_auto_trans = function(s) return s end
     windower.register_event = register_event
     windower.ffxi = {
