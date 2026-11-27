@@ -458,6 +458,10 @@ function make_decision(source) -- must be global to both A) be called from above
     elseif use_module() then
         start_timeout(2.5, 'module use');
         return logger(chat_colors.purple, '[DECISION STOP] CAUSE: Module being used.', true);
+    elseif skill_to_skillup == 'Summoning Magic' and windower.ffxi.get_mob_by_target('pet') then
+        start_timeout(1, 'release');
+        windower.send_command('input /ja "Release" <me>');
+        return logger(chat_colors.purple, '[DECISION STOP] Releasing the player\'s avatar...', true);
     end
 
     -- Vitals are polled here until the packet handlers are ported.

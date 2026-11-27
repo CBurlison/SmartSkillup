@@ -163,6 +163,11 @@ local function get_mob_by_target(target)
         return entity_to_mob(index)
     end
     -- Battle target: the sub-target when one is active, otherwise the target (matches Windower's 'bt').
+    if target == 'pet' then
+        local player = GetPlayerEntity();
+        if not player or player.PetTargetIndex == 0 then return nil; end
+        return entity_to_mob(player.PetTargetIndex);
+    end
     if target == 'bt' then
         local t = AshitaCore:GetMemoryManager():GetTarget()
         local index = t:GetIsSubTargetActive() ~= 0 and t:GetTargetIndex(1) or t:GetTargetIndex(0)

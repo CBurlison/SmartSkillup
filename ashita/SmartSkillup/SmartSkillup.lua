@@ -97,6 +97,7 @@ local function run_self_test()
     check('get_ability_recasts', function() return windower.ffxi.get_ability_recasts(); end);
     check('get_mob_by_target t', function() return windower.ffxi.get_mob_by_target('t'); end);
     check('get_mob_by_target bt', function() return windower.ffxi.get_mob_by_target('bt'); end);
+    check('get_mob_by_target pet', function() return windower.ffxi.get_mob_by_target('pet'); end);
     check('get_mob_by_target p1', function() return windower.ffxi.get_mob_by_target('p1'); end);
 
     -- Probes the spell resource fields the data layer will depend on.
