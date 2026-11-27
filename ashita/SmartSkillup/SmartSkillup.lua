@@ -503,7 +503,6 @@ local function print_help()
         'modulehelp   - Displays additional information on each module.',
         'automodules  - Displays information on the automatic modules not listed in the UI.',
         'help         - Shows this help text.',
-        'NOTE: UI commands (uihide, uishow, uiscale, uipos, uirebuild, uidefaults) are not ported yet.',
     };
     for _, line in ipairs(lines) do print('[SmartSkillup] ' .. line); end
 end
@@ -519,14 +518,12 @@ local function print_module_help()
         '*Haste:       Casts the most potent haste available to your main/sub jobs.',
         '*Sublimation: Automatically activates and completes Sublimation.',
         'NOTE: Modules marked with * are only available when the player is on a relevant main job.',
-        'Geo-Refresh and Radial Arcana are not ported yet.',
     };
     for _, line in ipairs(lines) do print('[SmartSkillup] ' .. line); end
 end
 
 local function print_auto_modules()
     print('[SmartSkillup] Composure: Used prior to refresh and haste - and removed after - if player is RDM50+.');
-    print('[SmartSkillup] Radial Arcana is not ported yet.');
 end
 
 -- Verb tables. Each maps an alias to the action it runs.
