@@ -12,6 +12,7 @@ local last_job_check = 0;
 auto_shutdown = auto_shutdown or false; -- read by helpers.lua when the last session skill is capped
 local initialize_sms;
 local check_job_change;
+local sms_ui;
 
 ashita.events.register('load', 'smartskillup_load', function()
     shim.install();
@@ -21,6 +22,10 @@ ashita.events.register('load', 'smartskillup_load', function()
     require('me');
     require('modules');
     require('sms_loop');
+    sms_ui = require('sms_ui');
+    ashita.events.register('d3d_present', 'smartskillup_ui', function()
+        sms_ui.render();
+    end);
     windower.register_event('incoming chunk', function(id, data)
         if id == 0x062 then
             if not check_job_change() then process_skill_packet(data); end
@@ -480,7 +485,7 @@ local function reset_session()
     initialize_sms();
 end
 
--- Prints the command list, mirroring the Windower help. UI commands are not ported (ImGui is deferred).
+-- Prints the command list, mirroring the Windower help. The ui* commands drive the ImGui window in sms_ui.lua.
 local function print_help()
     local lines = {
         '//sms [command]',
@@ -502,6 +507,13 @@ local function print_help()
         'spellreport  - Prints the spells SmartSkillup will use. Do "//sms spellreport weighted" to see the spell weights!',
         'modulehelp   - Displays additional information on each module.',
         'automodules  - Displays information on the automatic modules not listed in the UI.',
+        'uihide       - Hides the SmartSkillup window.',
+        'uishow       - Shows the SmartSkillup window.',
+        'uiscale      - Sets the window scale (0.5 to 1.5). Use "uiscale" alone to see the current value.',
+        'uizoom       - Steps the window scale in or out by 0.1. Usage: uizoom <in | out>.',
+        'uipos        - Sets the window position. Usage: uipos <x> <y>. Use "uipos" alone to see the current value.',
+        'uirebuild    - Reapplies the saved window position.',
+        'uidefaults   - Resets the window visibility, scale, and position to defaults.',
         'help         - Shows this help text.',
     };
     for _, line in ipairs(lines) do print('[SmartSkillup] ' .. line); end
@@ -603,6 +615,8 @@ local function dispatch(cmd)
         print_module_help();
     elseif verb == 'automodules' then
         print_auto_modules();
+    elseif sms_ui and sms_ui.handle_command(verb, args) then
+        -- handled by the UI module
     else
         print('[SmartSkillup] Unknown command "' .. verb .. '". Type /sms help for the command list.');
     end

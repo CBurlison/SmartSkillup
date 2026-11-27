@@ -12,7 +12,7 @@ main_skills = main_skills or T{}
 ENGAGED_STATUS = 1
 RESTING_STATUS = 33
 
--- UI is not ported yet; ui.* calls are no-ops until the ImGui pass.
+-- The ImGui window (sms_ui.lua) reads the session state directly, so these ui.* setters stay no-ops.
 ui = ui or setmetatable({}, { __index = function() return function() end end })
 
 -- ASCII stand-ins for the Windower chars glyphs used in the spell report.
