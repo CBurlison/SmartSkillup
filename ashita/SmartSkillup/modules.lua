@@ -148,8 +148,9 @@ function determine_modules()
     end
 end
 
--- Handles /sms togm <module>, with the Windower rules for mutually exclusive modules.
-function toggle_module(key)
+-- Handles /sms togm|addm|delm <module>, with the Windower rules for mutually exclusive modules.
+-- want is true to activate, false to deactivate, or nil to toggle.
+function toggle_module(key, want)
     local mod = modules[key];
     if not mod or key == 'compo' then
         return print('[SmartSkillup] Unknown module "' .. tostring(key) .. '". Modules: convert, refresh, haste, sublim, food, mp_limit, moogle, t_target.');
@@ -158,11 +159,16 @@ function toggle_module(key)
     end
 
     if key == 'mp_limit' then
-        set_mp_limit(mp_limit == nil and 10 or nil);
+        if want == nil then
+            set_mp_limit(mp_limit == nil and 10 or nil);
+        else
+            set_mp_limit(want and (mp_limit or 10) or nil);
+        end
         return print('[SmartSkillup] ' .. (mp_limit and 'Activated' or 'Deactivated') .. ' the "MP Limit" module.');
     end
 
-    local adding = not mod.active;
+    local adding = want;
+    if adding == nil then adding = not mod.active; end
     if key == 'convert' and adding then
         update_best_cures();
         if me.best_cures[1] == nil then

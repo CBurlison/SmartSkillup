@@ -9,6 +9,7 @@ require('common');
 local shim = require('windower_shim');
 local compat = require('sms_compat');
 local last_job_check = 0;
+auto_shutdown = auto_shutdown or false; -- read by helpers.lua when the last session skill is capped
 local initialize_sms;
 local check_job_change;
 
@@ -366,34 +367,172 @@ function initialize_sms()
     me.awaiting_initialize = nil;
 end
 
--- Adds a skill by partial name. Waits for the skill packet when the cap status is not known yet (Windower's 'add' flow).
-local function sms_add(term, attempts)
+-- Finds the main skills whose names start with the term, ignoring case, spaces, and punctuation (Windower's fuzzy match).
+local function find_main_skill(term)
+    local search = term:lower():gsub('%s', ''):gsub('%p', '');
+    local matches, match = 0, nil;
+    for skill_en in pairs(main_skills) do
+        local fuzzy = skill_en:lower():gsub('%s', ''):gsub('%p', '');
+        if fuzzy:sub(1, #search) == search then matches, match = matches + 1, skill_en; end
+    end
+    return matches, match;
+end
+
+local function any_debug_mode()
+    for _, on in pairs(debugModes) do
+        if on then return true; end
+    end
+    return false;
+end
+
+local function count_indi_spells(spells)
+    local count = 0;
+    for _, spell in ipairs(spells) do
+        if spell.en:sub(1, 5) == 'Indi-' then count = count + 1; end
+    end
+    return count;
+end
+
+-- Adds, removes, or toggles a skill in the session (Windower's addskill/delskill/togskill).
+-- Waits for the skill packet when the cap status is not known yet.
+local function skill_command(action, term, attempts)
     attempts = attempts or 0;
     if next(valid_spells_sorted) == nil then prepare_session(); end
-    local match = nil;
-    for skill_en in pairs(main_skills) do
-        if skill_en:lower():find(term:lower(), 1, true) then match = skill_en; end
+    if term == '' then
+        return print('[SmartSkillup] Please specify a skill, e.g. /sms addskill fishing.');
     end
-    if not match then
+    local matches, match = find_main_skill(term);
+    if matches ~= 1 then
+        return print('[SmartSkillup] ' .. matches .. ' skills match "' .. term .. '". Please narrow your search to one skill.');
+    elseif not match then
         return print('[SmartSkillup] No main skill matches "' .. term .. '".');
-    elseif main_skills[match].capped == nil then
+    end
+
+    local adding = action == 'add' or (action == 'tog' and not skills_to_skillup:contains(match));
+    if not adding then
+        if not skills_to_skillup:contains(match) then
+            return print('[SmartSkillup] "' .. match .. '" has not been added to the current session.');
+        end
+        remove_skill_from_session(match);
+        return print('[SmartSkillup] Removed "' .. match .. '" from your skillup list.');
+    end
+
+    -- Adding needs the cap status, which arrives in the skill packet. Retry a few times before giving up.
+    if main_skills[match].capped == nil then
         if attempts >= 5 then
             return print('[SmartSkillup] Failed to retrieve skill cap status, please try again.');
         end
         print('[SmartSkillup] [WAIT] Please wait, fetching skill cap status...');
         request_skill_data();
-        return coroutine.schedule(function() sms_add(term, attempts + 1); end, 2);
-    elseif main_skills[match].capped then
+        return coroutine.schedule(function() skill_command(action, term, attempts + 1); end, 2);
+    elseif main_skills[match].capped and not any_debug_mode() then
         return print('[SmartSkillup] [DENIED] ' .. match .. ' is currently capped (' .. main_skills[match].level .. ').');
-    elseif not valid_spells_sorted[match] or #valid_spells_sorted[match] == 0 then
-        return print('[SmartSkillup] "' .. match .. '" has no valid spells for this job.');
     elseif skills_to_skillup:contains(match) then
         return print('[SmartSkillup] "' .. match .. '" is already in the session.');
+    elseif not valid_spells_sorted[match] or #valid_spells_sorted[match] == 0 then
+        return print('[SmartSkillup] "' .. match .. '" has no valid spells for this job.');
+    elseif (match == 'Geomancy' or match == 'Handbell') and count_indi_spells(valid_spells_sorted[match]) < 2 then
+        return print('[SmartSkillup] Not enough indi spells to alternate for "' .. match .. '". Please learn more indi spells and try again.');
     end
     skills_to_skillup:insert(match);
     if skill_to_skillup == nil then skill_to_skillup = match; end
     print('[SmartSkillup] Added "' .. match .. '" (level ' .. main_skills[match].level .. '). Session skills: ' .. table.concat(skills_to_skillup, ', '));
 end
+
+-- Handles /sms pause, pauseon, and pauseoff (Windower's pause commands).
+local function pause_command(verb, silent)
+    local pausing = (verb == 'pause' and not paused) or verb == 'pauseon';
+    if not active then
+        return print('[SmartSkillup] There is no active skillup session to attempt to pause.');
+    elseif pausing == paused then
+        return print('[SmartSkillup] The skillup session is already ' .. (pausing and '' or 'un') .. 'paused.');
+    end
+
+    paused = pausing;
+    if not silent then
+        print('[SmartSkillup] Skillup session has been ' .. (pausing and 'paused' or 'unpaused') .. '.');
+    end
+    if pausing then
+        going = false; -- begin_loop requires going to be false to resume
+        end_timeout_and_decision('PLAYER PAUSE');
+    else
+        begin_loop('PLAYER UNPAUSE');
+    end
+end
+
+-- Handles /sms stop: ends the session and prints the skillup report.
+local function stop_session()
+    if not active then
+        return print('[SmartSkillup] There is no active skillup session to attempt to stop.');
+    end
+    active, going, paused = false, false, false;
+    end_timeout_and_decision('command stop');
+    print('[SmartSkillup] [FINISH] Skillup ending, producing your skillup report...');
+    print_skillup_report();
+end
+
+-- Handles /sms resetsession: reports the current session, then clears it and rebuilds the job data.
+local function reset_session()
+    if active or #skills_to_skillup > 0 then
+        print('[SmartSkillup] [SESSION RESET] Session resetting, producing your skillup report...');
+        print_skillup_report();
+    end
+    initialize_sms();
+end
+
+-- Prints the command list, mirroring the Windower help. UI commands are not ported (ImGui is deferred).
+local function print_help()
+    local lines = {
+        '//sms [command]',
+        'addskill     - If skillable by the player\'s main job, adds the given skill to the current skillup session. (aliases: add, adds)',
+        'delskill     - Removes the given skill from the current skillup session. (aliases: dels, rs)',
+        'togskill     - Adds/removes, if applicable, the given skill from the current skillup session. (alias: togs)',
+        'mplimit      - An optional limit to provide heavier MP conservation; any spells below this limit will be skipped.',
+        'go           - Activates a skillup session. Cannot activate if no skills have been added.',
+        'stop         - If active, deactivates the skillup session and provides a skillup report.',
+        'pause        - If active, toggles the session\'s paused/unpaused state.',
+        'pauseon      - If active and unpaused, pauses the session.',
+        'pauseoff     - If active and paused, unpauses the session.',
+        'autoshutdown - If active, will perform /shutdown when the session\'s last remaining skill is capped.',
+        'addmodule    - Turns on the selected module. (aliases: addm)',
+        'delmodule    - Turns off the selected module. (aliases: delm)',
+        'togmodule    - Toggles the selected module. (alias: togm)',
+        'resetsession - Deactivates any active skillup session and removes all selected skills. (called on job change)',
+        'debug        - Reveals debug-level logging in the chat window and allows capped skills to be added to the session.',
+        'spellreport  - Prints the spells SmartSkillup will use. Do "//sms spellreport weighted" to see the spell weights!',
+        'modulehelp   - Displays additional information on each module.',
+        'automodules  - Displays information on the automatic modules not listed in the UI.',
+        'help         - Shows this help text.',
+        'NOTE: UI commands (uihide, uishow, uiscale, uipos, uirebuild, uidefaults) are not ported yet.',
+    };
+    for _, line in ipairs(lines) do print('[SmartSkillup] ' .. line); end
+end
+
+local function print_module_help()
+    local lines = {
+        'MP Limit:     Only spells below the current limit will be auto-cast.',
+        'Trust Target: Ensures a targetable trust is summoned, as their ilvl mob status boosts skillup rate.',
+        'SkillUp Food: Uses the best magic food available in your inventory, sack, satchel, or case.',
+        '*Moogle:      Summons the "Moogle" trust to utilize its refresh and skillup rate boost.',
+        '*Convert:     Uses convert when MP is below 25%. Requires a cure spell for use in recovering.',
+        '*Refresh:     Casts the most potent refresh available to your main/sub jobs.',
+        '*Haste:       Casts the most potent haste available to your main/sub jobs.',
+        '*Sublimation: Automatically activates and completes Sublimation.',
+        'NOTE: Modules marked with * are only available when the player is on a relevant main job.',
+        'Geo-Refresh and Radial Arcana are not ported yet.',
+    };
+    for _, line in ipairs(lines) do print('[SmartSkillup] ' .. line); end
+end
+
+local function print_auto_modules()
+    print('[SmartSkillup] Composure: Used prior to refresh and haste - and removed after - if player is RDM50+.');
+    print('[SmartSkillup] Radial Arcana is not ported yet.');
+end
+
+-- Verb tables. Each maps an alias to the action it runs.
+local SKILL_VERBS = { addskill = 'add', adds = 'add', add = 'add', delskill = 'del', dels = 'del', rs = 'del', togskill = 'tog', togs = 'tog' };
+local MODULE_VERBS = { addmodule = 'add', addm = 'add', delmodule = 'del', delm = 'del', togmodule = 'tog', togm = 'tog' };
+local SESSION_STOP = { stop = true, off = true, come = true, finish = true, complete = true };
 
 -- Handles /sms mplimit [silent] [toggle | <number>] (Windower's mplimit command).
 local function handle_mplimit(args)
@@ -415,37 +554,64 @@ local function handle_mplimit(args)
     if not silent then print('[SmartSkillup] Set MP Limit to ' .. tostring(mp_limit)); end
 end
 
--- Returns true when the command was one of ours, so the caller can block it.
+-- Routes /sms and /smartskillup commands. Returns true when the command belongs to this addon, so the caller can block it.
 local function dispatch(cmd)
-    if cmd:match('^/smartskillup%s+test%s*$') or cmd:match('^/sms%s+test%s*$') then
+    local prefix, rest = cmd:match('^/(%S+)%s*(.-)%s*$');
+    if prefix ~= 'sms' and prefix ~= 'smartskillup' then return false; end
+
+    local verb, args = rest:match('^(%S*)%s*(.-)%s*$');
+    verb = verb:lower();
+    if verb == '' or verb == 'help' then
+        print_help();
+    elseif verb == 'test' then
         run_self_test();
-    elseif cmd:match('^/sms%s+go%s*$') or cmd:match('^/smartskillup%s+go%s*$') or cmd:match('^/sms%s+go%s+".*"%s*$') or cmd:match('^/smartskillup%s+go%s+".*"%s*$') then
+    elseif verb == 'go' then
         ensure_session();
         begin_loop('command');
-    elseif cmd:match('^/sms%s+stop%s*$') or cmd:match('^/smartskillup%s+stop%s*$') then
-        active, going, paused = false, false, false;
-        end_timeout_and_decision('command stop');
-        print('[SmartSkillup] Stopped.');
-    elseif cmd:match('^/sms%s+debug%s*%S*%s*$') or cmd:match('^/smartskillup%s+debug%s*%S*%s*$') then
-        local mode = (cmd:match('^/%S+%s+debug%s+(%S+)') or 'norm'):lower();
+    elseif SESSION_STOP[verb] then
+        stop_session();
+    elseif SKILL_VERBS[verb] then
+        skill_command(SKILL_VERBS[verb], args);
+    elseif verb == 'mplimit' then
+        handle_mplimit(args);
+    elseif verb == 'pause' or verb == 'pauseon' or verb == 'pauseoff' then
+        pause_command(verb, args:lower() == 'silent');
+    elseif MODULE_VERBS[verb] then
+        local key = args:lower();
+        if key == '' then
+            print('[SmartSkillup] Usage: /sms ' .. verb .. ' <module>. Modules: convert, refresh, haste, sublim, food, mp_limit, moogle, t_target.');
+        else
+            local action = MODULE_VERBS[verb];
+            local want = nil;
+            if action == 'add' then want = true; elseif action == 'del' then want = false; end
+            ensure_session();
+            toggle_module(key, want);
+        end
+    elseif verb == 'autoshutdown' then
+        auto_shutdown = not auto_shutdown;
+        print('[SmartSkillup] [AUTO-SHUTDOWN] Feature has been ' .. (auto_shutdown and 'activated; will /shutdown when last skill is capped' or 'deactivated') .. '.');
+    elseif verb == 'resetsession' then
+        reset_session();
+    elseif verb == 'debug' then
+        local mode = args ~= '' and args:lower() or 'norm';
         if debugModes[mode] == nil then
             print('[SmartSkillup] No "' .. mode .. '" debug mode exists. Use "norm" or "deep".');
         else
             debugModes[mode] = not debugModes[mode];
             print('[SmartSkillup] Debug mode "' .. mode .. '" is now ' .. (debugModes[mode] and 'ON' or 'OFF') .. '.');
         end
-    elseif cmd:match('^/sms%s+add%s+%S') or cmd:match('^/smartskillup%s+add%s+%S') then
-        sms_add(cmd:match('^/%S+%s+add%s+(.-)%s*$'));
-    elseif cmd:match('^/%S+%s+mplimit$') or cmd:match('^/%S+%s+mplimit%s') then
-        handle_mplimit(cmd:match('^/%S+%s+mplimit%s*(.-)%s*$'));
-    elseif cmd:match('^/sms%s+togm%s+%S') or cmd:match('^/smartskillup%s+togm%s+%S') then
-        ensure_session();
-        toggle_module(cmd:match('^/%S+%s+togm%s+(%S+)%s*$'):lower());
+    elseif verb == 'spellreport' then
+        print_spell_availability(args:lower() == 'weighted');
+    elseif verb == 'modulehelp' then
+        print_module_help();
+    elseif verb == 'automodules' then
+        print_auto_modules();
     else
-        return false;
+        print('[SmartSkillup] Unknown command "' .. verb .. '". Type /sms help for the command list.');
     end
     return true;
 end
+
 
 shim.set_self_command_handler(function(cmd)
     dispatch('/' .. cmd);
