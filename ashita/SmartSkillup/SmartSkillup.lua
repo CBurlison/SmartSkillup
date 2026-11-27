@@ -1,8 +1,8 @@
 addon.name    = 'SmartSkillup';
-addon.author  = 'Roland-J';
+addon.author  = 'Roland-J, CBurlison';
 addon.version = '0.1.0';
 addon.desc    = 'Ashita port of SmartSkillup (in progress: shim and entry only).';
-addon.link    = 'https://github.com/Roland-J/SmartSkillup';
+addon.link    = 'https://github.com/CBurlison/SmartSkillup';
 
 require('common');
 
