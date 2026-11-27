@@ -127,8 +127,7 @@ end
 
 -- Drags the window to a new spot and saves its position on mouse release.
 local function track_position()
-    local pos = imgui.GetWindowPos();
-    local wx, wy = pos.x or pos[1], pos.y or pos[2];
+    local wx, wy = imgui.GetWindowPos();
     if imgui.IsWindowHovered() and imgui.IsMouseDown(0) then dragging = true; end
     if dragging and not imgui.IsMouseDown(0) then
         dragging = false;
