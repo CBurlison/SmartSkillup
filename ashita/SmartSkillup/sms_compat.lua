@@ -115,6 +115,15 @@ function M.install_globals()
         if type(original_index) == 'table' then return original_index[k]; end
         return original_index(s, k);
     end;
+    -- The Ashita settings library calls :it(), :merge() and :copy() on T tables. Borrow them from Ashita's T before replacing it.
+    if type(T) == 'function' then
+        local ashita_index = getmetatable(T({})).__index;
+        if type(ashita_index) == 'function' then
+            for _, name in ipairs({ 'it', 'merge', 'copy' }) do
+                T_mt[name] = T_mt[name] or ashita_index(nil, name);
+            end
+        end
+    end
     T = M.T;
     S = M.S;
     coroutine.schedule = schedule;
