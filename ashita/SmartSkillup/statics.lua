@@ -86,7 +86,9 @@ buff_ids = buff_ids or T{
 	sublimation = 187,
 }
 -- FFXI container ids (Inventory, Satchel, Sack, Case), iterated inventory first.
--- TODO(ashita): confirm these ids in game.
+-- Matches the player bag ids used by the autobox addon (PLAYER_ITEM_BAGS = {0,3,5,6,7}, where 3 is temporary and skipped here).
+-- Confirmed in game: /sms test reports max=80 for bags 0, 5, 6 and 7.
+-- TODO(ashita): confirm the food scan in game with a Pitaru in a bag (/sms test lists the food found per bag).
 bags_ordered = T{0, 5, 6, 7}
 skillup_foods = T{ -- magic skillup foods, indexed by potency for ipairs usage
     T{id = sms_res.item_id_by_name('B.E.W. Pitaru'),  en = 'B.E.W. Pitaru'},  -- 80%
