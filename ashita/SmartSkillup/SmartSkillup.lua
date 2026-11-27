@@ -93,6 +93,16 @@ local function run_self_test()
         check('  hp/mp', function() return player.hp .. '/' .. player.mp; end);
     end
     check('get_party', function() return windower.ffxi.get_party(); end);
+    local p = windower.ffxi.get_party() or {};
+    print('[SmartSkillup][TEST] party1_count=' .. tostring(p.party1_count) .. ' party2_count=' .. tostring(p.party2_count) .. ' party3_count=' .. tostring(p.party3_count) .. ' party1_leader=' .. tostring(p.party1_leader) .. ' my_id=' .. tostring(me and me.id));
+    for i = 0, 5 do
+        local m = p['p' .. i];
+        if m then print('[SmartSkillup][TEST]   p' .. i .. ' name=' .. tostring(m.name) .. ' spawn_type=' .. tostring(m.mob and m.mob.spawn_type)); end
+    end
+    if me then
+        update_me_party();
+        print('[SmartSkillup][TEST] can_summon_trusts=' .. tostring(me.can_summon_trusts) .. ' has_trust_target=' .. tostring(me.has_trust_target));
+    end
     check('get_info', function() return windower.ffxi.get_info(); end);
     check('get_spell_recasts', function() return windower.ffxi.get_spell_recasts(); end);
     check('get_ability_recasts', function() return windower.ffxi.get_ability_recasts(); end);

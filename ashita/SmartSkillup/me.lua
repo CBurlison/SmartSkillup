@@ -67,16 +67,25 @@ end
 -- Rebuilds me's party table and sets the me.can_summon_trusts and me.has_trust_target flags
 -------------------------------------------------------------------------------------------------------------------
 function update_me_party()
-	local members = windower.ffxi.get_party() or {}
+	local p = windower.ffxi.get_party() or {}
 	me.party = T{}
-	for i, m in ipairs(members) do
-		me.party[i] = m.name
-	end
-	-- APPROXIMATION: Windower also allowed trust summoning when the player leads the party.
-	-- TODO(ashita): read the party leader and alliance counts to match that rule.
-	me.can_summon_trusts = #members <= 1
-	-- TODO(ashita): trust detection (Windower used mob.spawn_type == 14)
+	local party3_count = tonumber(p.party3_count) or 0
+	local party2_count = tonumber(p.party2_count) or 0
+	local party1_count = tonumber(p.party1_count) or 0
+	me.can_summon_trusts = (party3_count == 0 and party2_count == 0 and party1_count == 1) or p.party1_leader == me.id
 	me.has_trust_target = false
+	for i = 0, 5, 1 do
+		local m = p['p' .. i]
+		if m and m.mob then
+			-- RECORD MEMBER
+			me.party[i+1] = m.name
+
+			-- SET TRUST TARGET FLAG
+			if not me.has_trust_target and m.mob.spawn_type == 14 and not untargetable_trusts:contains(m.name) then
+				me.has_trust_target = true
+			end
+		end
+	end
 end
 
 

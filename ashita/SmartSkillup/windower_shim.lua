@@ -53,11 +53,11 @@ local function tick()
     end
 end
 
--- Windower spawn_type values used by the loop: 16 = monster, 14 = trust (NPC in the party).
-local function spawn_type_from_flags(flags)
-    flags = flags or 0;
-    if bit.band(flags, 0x10) ~= 0 then return 16; end
-    if bit.band(flags, 0x06) == 0x06 then return 14; end
+-- Windower spawn_type values used by the loop: 16 = monster, 14 = trust.
+-- A trust is an NPC with a non-zero owner (TrustOwnerTargetIndex), per the Ashita SDK.
+local function spawn_type_from_entity(ent)
+    if bit.band(ent.SpawnFlags or 0, 0x10) ~= 0 then return 16; end
+    if (ent.TrustOwnerTargetIndex or 0) ~= 0 then return 14; end
     return 0;
 end
 
@@ -71,7 +71,7 @@ local function entity_to_mob(index)
         name = ent.Name,
         hpp = ent.HPPercent,
         distance = ent.Distance,
-        spawn_type = spawn_type_from_flags(ent.SpawnFlags),
+        spawn_type = spawn_type_from_entity(ent),
         -- Ashita only exposes ClaimStatus, not the claimer's id, so this is "claimed by anyone".
         claimed = (ent.ClaimStatus or 0) ~= 0,
     }
@@ -188,23 +188,26 @@ local function get_info()
     return { zone = zone, zone_name = zone_name }
 end
 
+-- Shaped like Windower's get_party(): party1/2/3_count, party1_leader, and p0..p5 slots with a mob.
+-- Counts and leader come from IParty alliance getters (SDK-verified); slot mobs use the member's target index.
 local function get_party()
     local party = AshitaCore:GetMemoryManager():GetParty()
-    local members = {}
-    if not party then return members end
-    for i = 0, 17 do
+    local out = {}
+    if not party then return out end
+    out.party1_count = party:GetAlliancePartyMemberCount1()
+    out.party2_count = party:GetAlliancePartyMemberCount2()
+    out.party3_count = party:GetAlliancePartyMemberCount3()
+    out.party1_leader = party:GetAlliancePartyLeaderServerId1()
+    for i = 0, 5 do
         if party:GetMemberIsActive(i) == 1 then
-            members[#members + 1] = {
+            out['p' .. i] = {
                 name = party:GetMemberName(i),
                 id = party:GetMemberServerId(i),
-                hp = party:GetMemberHP(i),
-                mp = party:GetMemberMP(i),
-                main_job_id = party:GetMemberMainJob(i),
-                main_job_level = party:GetMemberMainJobLevel(i),
+                mob = entity_to_mob(party:GetMemberTargetIndex(i)),
             }
         end
     end
-    return members
+    return out
 end
 
 -- Bag contents keyed like Windower's get_items(). UNVERIFIED: enabled_* flags are always true,
