@@ -21,8 +21,8 @@ function T_mt:find(value_or_fn)
     end
     return nil;
 end
-function T_mt:insert(value)
-    table.insert(self, value);
+function T_mt:insert(...)
+    table.insert(self, ...);
 end
 function T_mt:delete(value)
     local k = self:find(value);
@@ -119,7 +119,7 @@ function M.install_globals()
     if type(T) == 'function' then
         local ashita_index = getmetatable(T({})).__index;
         if type(ashita_index) == 'function' then
-            for _, name in ipairs({ 'it', 'merge', 'copy' }) do
+            for _, name in ipairs({ 'it', 'each', 'merge', 'copy' }) do
                 T_mt[name] = T_mt[name] or ashita_index(nil, name);
             end
         end
